@@ -1,0 +1,5 @@
+" ","Node","Positive edge","Negative edge","Average degree","Modularity","Clustering coefficient","Average path length"
+"Winter Biocrust",27,36,8,3.259,0.447,0.46,2.573
+"Summer Biocrust",24,30,8,3.167,0.509,0.429,2.697
+"Winter Biocrust-removal",15,14,4,2.4,0.384,0.438,2.284
+"Summer Biocrust-removal",13,13,4,2.615,0.324,0.438,2.303

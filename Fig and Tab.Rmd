@@ -1,0 +1,1847 @@
+---
+title: "Fig and Tab"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = FALSE, 
+	results = FALSE, 
+	message = FALSE, 
+	warning = FALSE, 
+	fig.keep = "high",
+	fig.align = "center",
+	dpi = 300
+)
+```
+
+
+```{r Bar, fig.width = 6, fig.height = 6}
+library(xlsx)
+library(dplyr)
+library(plyr)
+library(ggplot2)
+library(ggsignif)
+library(rstatix)
+library(agricolae)
+library(tidyr)
+library(ggpubr)
+
+year <- read.xlsx("data/yearall2.xlsx", header = TRUE, sheetName = "YEAR") %>% 
+  filter(season %in% c("Winter", "Summer"))
+
+#AOA
+AOA <- select(year, c("Sample", "season", "treat", "layer", "AOA"))
+
+# 正态性检验
+AOA_shap <- AOA %>% group_by(season, treat, layer) %>% shapiro_test(AOA)
+# p值>0.05，服从正态分布；否则，不服从正态分布
+AOA_shap$p > 0.05
+
+# 方差齐次检验
+AOA_levene <- levene_test(group_by(AOA, season, treat), AOA~layer)
+# p值>0.05，方差齐次；否则，方差不齐
+AOA_levene$p > 0.05
+
+# 分组方差分析后进行多重比较--非参数检验
+AOA_df <- data.frame()
+
+for (season in unique(AOA$season)) {
+  for (treat in unique(AOA$treat)) {
+    AOA_kruskal_new <- kruskal.test(AOA~layer, AOA[(AOA$season == season & AOA$treat == treat), ])
+    AOA_kruskal_test <- with(AOA[(AOA$season == season & AOA$treat == treat), ], 
+                             kruskal(AOA, layer, p.adj = "bonferroni", group = TRUE))
+    AOA_df_new <- data.frame(AOA_kruskal_test$groups)
+    AOA_df_new[length(unique(AOA_df_new$groups)) == 1]$groups = ""
+    AOA_df_new$layer <- rownames(AOA_df_new)
+    AOA_df_new$season <- season
+    AOA_df_new$treat <- treat
+    AOA_df_new <- select(AOA_df_new, season, treat, layer, groups)
+    AOA_df <- rbind(AOA_df, AOA_df_new)
+  }
+}
+
+AOA_mean <- ddply(AOA, c("treat", "season", "layer"), summarise, 
+                  AOA.N    = length(AOA), 
+                  AOA.mean = mean(AOA), 
+                  AOA.sd   = sd(AOA), 
+                  AOA.se   = AOA.sd/sqrt(AOA.N))
+
+AOA_mean <- left_join(AOA_mean, AOA_df, by = c("treat", "season", "layer"))
+
+AOA_mean$season <- factor(AOA_mean$season, levels = c("Winter", "Summer"))
+
+AOA_mean$layer <- factor(AOA_mean$layer, levels = c("0-2 cm", "2-5 cm", "5-10 cm", "10-20 cm"))
+
+AOA_ylab <- expression(atop(No.~of~AOA~italic(amoA)~genes, ("copies · g"^~"-1"~"dry soil")))
+
+AOA_p <- ggplot(AOA_mean, aes(x = season, y = AOA.mean, fill = season, alpha = layer)) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.6) +
+  geom_errorbar(aes(ymax = AOA.mean + AOA.se, ymin = AOA.mean - AOA.se), 
+                stat = "identity", position = position_dodge(0.6), width = 0.12, show.legend = FALSE) +
+  geom_text(aes(y = AOA.mean + AOA.se + 7000, label = groups), 
+            size = 4, position = position_dodge(0.6), show.legend = FALSE) +
+  geom_signif(comparisons = list(c("Winter", "Summer")), test = "wilcox.test", 
+              map_signif_level = TRUE, vjust = 0.05,
+              tip_length = 0.02, textsize = 4) +
+  xlab("") +
+  ylab(AOA_ylab) + 
+  guides(fill = "none") + 
+  scale_fill_manual(values = c("#4682B4", "#A0522D"), breaks = c("Winter", "Summer"), labels = c("Winter", "Summer")) + 
+  scale_alpha_manual(values = c(1, 0.7, 0.4, 0.1), breaks = c("0-2 cm", "2-5 cm", "5-10 cm", "10-20 cm"), 
+                     labels = c("0-2 cm", "2-5 cm", "5-10 cm", "10-20 cm")) +
+  scale_y_continuous(labels = scales::comma, expand = c(0, 0.50, 0.15, 0.50)) +
+  theme_bw(base_size = 12) + 
+  theme(panel.grid = element_blank()) + 
+  theme(legend.position = "top") +
+  theme(axis.title = element_text(face = "bold"), 
+        strip.text = element_text(face = "bold")) +
+  facet_wrap(~treat) 
+ 
+#AOB
+AOB <- select(year, c("Sample", "season", "treat", "layer", "AOB"))
+
+# 正态性检验
+AOB_shap <- AOB %>% group_by(season, treat, layer) %>% shapiro_test(AOB)
+# p值>0.05，服从正态分布；否则，不服从正态分布
+AOB_shap$p > 0.05
+
+# 方差齐性检验
+AOB_levene <- levene_test(group_by(AOB, season, treat), AOB~layer)
+# p值>0.05，方差齐性
+AOB_levene$p > 0.05
+
+# 分组方差分析后进行多重比较--非参数检验
+AOB_df <- data.frame()
+
+for (season in unique(AOB$season)) {
+  for (treat in unique(AOB$treat)) {
+    AOB_kruskal_new <- kruskal.test(AOB~layer, AOB[(AOB$season == season & AOB$treat == treat), ])
+    AOB_kruskal_test <- with(AOB[(AOB$season == season & AOB$treat == treat), ], 
+                             kruskal(AOB, layer, p.adj = "bonferroni", group = TRUE))
+    AOB_df_new <- data.frame(AOB_kruskal_test$groups)
+    AOB_df_new[length(unique(AOB_df_new$groups)) == 1]$groups = ""
+    AOB_df_new$layer <- rownames(AOB_df_new)
+    AOB_df_new$season <- season
+    AOB_df_new$treat <- treat
+    AOB_df_new <- select(AOB_df_new, season, treat, layer, groups)
+    AOB_df <- rbind(AOB_df, AOB_df_new)
+  }
+}
+
+AOB_mean <- ddply(AOB, c("treat", "season", "layer"), summarise, 
+                  AOB.N    = length(AOB), 
+                  AOB.mean = mean(AOB), 
+                  AOB.sd   = sd(AOB), 
+                  AOB.se   = AOB.sd/sqrt(AOB.N))
+
+AOB_mean <- left_join(AOB_mean, AOB_df, by = c("treat", "season", "layer"))
+
+AOB_mean$season <- factor(AOB_mean$season, levels = c("Winter", "Summer"))
+
+AOB_mean$layer <- factor(AOB_mean$layer, levels = c("0-2 cm", "2-5 cm", "5-10 cm", "10-20 cm"))
+
+AOB_ylab <- expression(atop(No.~of~AOB~italic(amoA)~genes, ("copies · g"^~"-1"~"dry soil")))
+
+AOB_p <- ggplot(AOB_mean, aes(x = season, y = AOB.mean, fill = season, alpha = layer)) +
+  geom_bar(stat = "identity", position = "dodge", width = 0.6, show.legend = FALSE) +
+  geom_errorbar(aes(ymax = AOB.mean + AOB.se, ymin = AOB.mean - AOB.se), 
+                stat = "identity", position = position_dodge(0.6), width = 0.12, show.legend = FALSE) +
+  geom_text(aes(y = AOB.mean + AOB.se + 2200, label = groups), 
+            size = 4, position = position_dodge(0.6), show.legend = FALSE) +
+  geom_signif(comparisons = list(c("Winter", "Summer")), test = "wilcox.test", 
+              map_signif_level = TRUE, vjust = 0.05,
+              tip_length = 0.02, textsize = 4) +
+  ylab(AOB_ylab) + 
+  guides(fill = "none") + 
+  scale_fill_manual(values = c("#4682B4", "#A0522D"), breaks = c("Winter", "Summer"), labels = c("Winter", "Summer")) + 
+  scale_alpha_manual(values = c(1, 0.7, 0.4, 0.1), breaks = c("0-2 cm", "2-5 cm", "5-10 cm", "10-20 cm"), 
+                     labels = c("0-2 cm", "2-5 cm", "5-10 cm", "10-20 cm")) +
+  scale_y_continuous(labels = scales::comma, expand = c(0, 0.50, 0.15, 0.50)) +
+  theme_bw(base_size = 12) + 
+  theme(panel.grid = element_blank()) + 
+  theme(legend.position = "none") +
+  theme(axis.title = element_text(face = "bold"), 
+        strip.text = element_text(face = "bold")) +
+  facet_wrap(~treat) 
+
+ggarrange(AOA_p, AOB_p, nrow = 2, ncol = 1,
+          labels = c("A", "B"), align = "hv", heights = c(1.2, 1),
+          font.label = list(color = "red", size = 20, face = "bold"))
+
+pdf("图1.pdf", width = 6, height = 6)
+ggarrange(AOA_p, AOB_p, nrow = 2, ncol = 1,
+          labels = c("A", "B"), align = "hv", heights = c(1.2, 1),
+          font.label = list(color = "red", size = 20, face = "bold"))
+dev.off()
+```
+
+>Fig. 1
+
+\newpage
+
+```{r RDA, fig.width = 8, fig.height = 6}
+library(xlsx)
+library(vegan)
+library(ggplot2)
+library(ggrepel)
+library(ggpp)
+library(tibble)
+library(scales)
+
+year <- read.xlsx("data/yearall2.xlsx", header = TRUE, sheetName = "YEAR")
+
+year_df <- year[year$season %in% c("Winter", "Summer"), ]
+
+env <- subset(year_df, select = c(Tem:NO3))
+rownames(env) <- year_df$Sample
+
+sp <- subset(year_df, select = c(AOA:AOB))
+rownames(sp) <- year_df$Sample
+
+gr <- subset(year_df, select = c(season:layer))
+rownames(gr) <- year_df$Sample
+
+spp <- log10(sp) # 对物种变量做log转化
+
+env_scale <- data.frame(scale(env)) # 对环境因子进行标准化，是否进行标准化结果一样
+
+uu <- rda(spp ~., env_scale) # 所有环境因子进行RDA分析
+uu
+
+# 用step模型检测最低AIC值, 筛选显著性
+mod_u <- step(uu, scope = formula(uu), test = "perm") # "perm"增加P值等参数
+
+uu <- rda(spp ~ Tem + NO3 + TC, data = env_scale) # RDA分析
+vif.cca(uu)
+
+# summary(uu)
+
+ano_uu <- anova(uu)
+ano_uu
+anova(uu, by = "term")
+anova(uu, by = "axis")
+
+Explained <- RsquareAdj(rda(spp ~ Tem + NO3 + TC, data = env_scale))$r.squared
+Unexplained <- 1 - Explained
+Tem <- RsquareAdj(rda(spp ~ Tem, data = env_scale))$r.squared
+NO3 <- RsquareAdj(rda(spp ~ Tem + NO3, data = env_scale))$r.squared - Tem
+TC <- RsquareAdj(rda(spp ~ Tem + NO3 + TC, data = env_scale))$r.squared - Tem - NO3
+
+df1 <- data.frame(rbind(Unexplained, Explained))
+colnames(df1) <- "y"
+df1$x <- 1
+df1$var <- paste(rownames(df1), "~", format(df1$y * 100, digits = 4), "%", sep = "")
+df1$var <- factor(df1$var, levels = df1$var)
+
+df2 <- data.frame(rbind(Unexplained, Tem, NO3, TC))
+colnames(df2) <- "y"
+df2$x <- 2
+df2$var <- paste(rownames(df2), "~", format(df2$y * 100, digits = 4), "%", sep = "")
+df2$var <- factor(df2$var, levels = df2$var)
+
+df <- rbind(df1, df2)
+
+lab_var <- c("", "Explained~`56.25%`", "Unexplained~`43.75%`", 
+             "Tem~`29.87%`", "NO[3]^`-`~`16.08%`", "TC~`8.09%`")
+
+set.seed(1)
+p <- ggplot(df, aes(x = x, y = y, fill = var)) +
+  geom_bar(width = 0.7, stat = "identity", position = "fill", show.legend = FALSE) +
+  coord_polar(theta = "y") +
+  geom_text_repel(aes(label = lab_var), parse = TRUE, position = position_fill(vjust = 0.5), 
+                   size = 3, segment.color = "black", show.legend = FALSE) + 
+  scale_fill_manual(values = c("#BBD69B", "#BADDE9", "#BBD69B", "#A7D4C3", "#509A80", "#4F7764", "#3D6756")) + 
+  theme_bw() +
+  theme(panel.background = element_blank(),
+        plot.margin = unit(rep(-0.5, 4), "cm"), 
+        panel.border = element_blank(), 
+        panel.grid = element_blank(), 
+        axis.ticks = element_blank(),
+        axis.title = element_blank(), 
+        axis.text = element_blank()) 
+# p
+ii <- summary(uu)  # 查看分析结果
+sp <- as.data.frame(ii$species[, 1:2])  # 提取相应变量坐标，可根据出图结果，对画图数据做一定的放大或缩小
+st <- as.data.frame(ii$sites[, 1:2])*2  # 提取样方坐标
+yz <- as.data.frame(ii$biplot[, 1:2])*2 # 提取解释变量坐标
+
+lab_yz <- c("Tem", "NO[3]^`-`", "TC")
+
+p_RDA <- ggplot(data = st) + 
+  annotate("plot_npc", npcx = 0.99, npcy = 0.99, label = p) +
+  
+  geom_point(aes(RDA1, RDA2, shape = gr$treat, fill = gr$season, color = gr$season, alpha = gr$layer), size = 6) + 
+  
+  geom_segment(data = sp, aes(x = 0, y = 0, xend = RDA1, yend = RDA2), arrow = arrow(angle = 22.5, length = unit(0.35, "cm"), type = "closed"), linetype = 2, size = 1, color = "#DB7093") + 
+  geom_text_repel(data = sp, aes(RDA1, RDA2, label = row.names(sp)), point.padding = unit(8, "lines"), direction = "y", color = "#DB7093", cex = 4) + 
+  
+  geom_segment(data = yz, aes(x = 0, y = 0, xend = RDA1, yend = RDA2), arrow = arrow(angle = 22.5, length = unit(0.35, "cm"), type = "closed"), linetype = 1, size = 1, color = "#2E8B57") + 
+  geom_text_repel(data = yz, aes(RDA1, RDA2, label = lab_yz), point.padding = unit(8, "lines"), direction = "y", parse = TRUE, color = "#2E8B57", cex = 4) + 
+  
+  labs(x = paste("RDA 1 (", format(100 *ii$cont[[1]][2, 1], digits = 4), "%)", sep = ""), 
+       y = paste("RDA 2 (", format(100 *ii$cont[[1]][2, 2], digits = 4), "%)", sep = "")) + 
+  
+  geom_hline(yintercept = 0, linetype = 3, size = 1) + 
+  geom_vline(xintercept = 0, linetype = 3, size = 1) + 
+  
+  annotate("text", x = -1.2, y = 3.0, cex = 4,  
+           label = paste("italic(F)", " == ", round(ano_uu[1, 3], 2), "~`,`~", 
+                         "italic(p)", " < ", ano_uu[1, 4], sep = ""), parse = TRUE) +
+  
+  guides(shape = guide_legend(title = "Treatment", override.aes = list(size = 6), order = 1), 
+         fill = guide_legend(title = "Season", override.aes = list(size = 6), order = 2), 
+         color = guide_legend(title = "Season", override.aes = list(size = 6), order = 2), 
+         alpha = guide_legend(title = "Layer", override.aes = list(size = 6), order = 3)) + 
+  scale_shape_manual(values = c(22, 21), labels = c("Biocrust", "Biocrust-removal")) + 
+  scale_fill_manual(values = c("#4682B4", "#A0522D"), breaks = c("Winter", "Summer"), labels = c("Winter", "Summer")) + 
+  scale_color_manual(values = c("#4682B4", "#A0522D"), breaks = c("Winter", "Summer"), labels = c("Winter", "Summer")) + 
+  scale_alpha_manual(values = c(1, 0.7, 0.4, 0.1), breaks = c("0-2 cm", "2-5 cm", "5-10 cm", "10-20 cm"), 
+                     labels = c("0-2 cm", "2-5 cm", "5-10 cm", "10-20 cm")) + 
+  theme_bw(base_size = 12) +
+  theme(panel.grid = element_blank()) + 
+  theme(axis.title = element_text(face = "bold"))
+
+p_RDA
+
+pdf("图2.pdf", width = 8, height = 6)
+p_RDA
+dev.off()
+```
+
+>Fig. 2
+
+\newpage
+
+```{r Otu_Flattening}
+library(xlsx)
+library(vegan)
+
+# 读入OTU数据
+otu <- read.xlsx("data/OTU表.xlsx", header = TRUE, row.names = 1, sheetName = "OTU表", check.names = FALSE)
+colSums(otu)
+
+#使用该代码进行抽平
+otu_Flattening = as.data.frame(t(rrarefy(t(otu), min(colSums(otu)))))
+
+#查看抽平后的每个样本的和
+colSums(otu_Flattening)
+
+write.csv(otu_Flattening, "data/OTU表_抽平.csv")
+```
+
+```{r Alpha_analysis}
+library(dplyr)
+library(plyr)
+library(picante)
+library(tidyverse)
+library(tidyr)
+library(ggplot2)
+library(ggsignif)
+
+# 读入OTU数据
+otu <- read.csv("data/OTU表_抽平.csv", row.names = 1, check.names = FALSE)
+
+# 筛选出至少在3个样本中的序列数均大于或等于 5 的 OTU
+# otu <- otu[apply(otu, 1, function(x) {ifelse(sum(x>=3) > 3, TRUE, FALSE)}), ]
+
+otu <- data.frame(t(otu))
+
+year <- read.xlsx("data/yearall2.xlsx", header = TRUE, sheetName = "YEAR")
+group <- select(year, Sample, season, treat, layer)
+group <- group[group$Sample %in% rownames(otu), ]
+
+# 0-2 cm土层中序列数
+seq_A <- sum(otu[str_detect(rownames(otu), "A"), ])
+
+# 2-5 cm土层中序列数
+seq_B <- sum(otu[str_detect(rownames(otu), "B"), ])
+
+alpha <- function(x, tree = NULL, base = exp(1)){
+  est <- estimateR(x)
+  Richness <- est[1, ]
+  Chao1 <- est[2, ]
+  ACE <- est[4, ]
+  Shannon <- vegan::diversity(x, index = 'shannon', base = base)
+  Simpson <- vegan::diversity(x, index = 'simpson')    #Gini-Simpson 指数
+  Pielou <- Shannon / log(Richness, base)
+  goods_coverage <- 1 - rowSums(x == 1) / rowSums(x)
+  
+  result <- data.frame(Richness, Shannon, Simpson, Pielou, Chao1, ACE, goods_coverage)
+  if (!is.null(tree)) {
+    PD_whole_tree <- pd(x, tree, include.root = FALSE)[1]
+    names(PD_whole_tree) <- 'PD_whole_tree'
+    result <- cbind(result, PD_whole_tree)
+  }
+  result
+}
+
+alpha_all <- alpha(otu, base = 2)
+alpha_all <- alpha_all[order(rownames(otu)),]
+
+season <- group$season
+layer <- group$layer
+
+alpha_all_agg <- aggregate(alpha_all, by = list(season, layer), FUN = mean)
+write.csv(alpha_all_agg, "data/year-alpha.csv", quote = FALSE)
+
+alpha_all$season <- group$season
+alpha_all$layer <- group$layer
+```
+
+```{r Alpha_plot}
+plot_data <- select(alpha_all, season, layer, Shannon, Pielou) %>% 
+  gather(key = "varname", value = "value", Shannon:Pielou) 
+
+plot_data$season <- factor(plot_data$season, levels = c("Winter", "Summer"))
+
+plot_data$layer <- factor(plot_data$layer, levels = c("0-2 cm", "2-5 cm"), labels = c("Biocrust", "Biocrust-removal"))
+
+plot_data$varname <- factor(plot_data$varname, levels = c("Shannon", "Pielou"))
+
+p_alpha <- ggplot(plot_data, aes(layer, value, fill = season)) + 
+  geom_boxplot(width = 0.6, outlier.colour = "#FFFFFF", show.legend = FALSE) + 
+  geom_signif(comparisons = list(c("Biocrust", "Biocrust-removal")), 
+              test = "wilcox.test", map_signif_level = TRUE, textsize = 6) + 
+  scale_fill_manual("Season", values = c("#4682B4", "#A0522D")) + 
+  scale_y_continuous(expand = expansion(c(0.05, 0.2))) + 
+  labs(x = "Treatment", y = NULL) +
+  theme_bw(base_size = 12) + 
+  theme(panel.grid = element_blank()) + 
+  theme(axis.title = element_text(face = "bold"), 
+        strip.text = element_text(face = "bold"), 
+        strip.background = element_blank(), 
+        strip.placement = "outside") + 
+  facet_wrap(~varname, scales = "free_y", strip.position = "left")
+```
+
+```{r PcoA, fig.width = 6, fig.height = 7}
+library(xlsx)
+library(vegan)
+library(tidyverse)
+library(ape)
+library(ggplot2)
+library(ggpubr)
+
+# 读入OTU数据
+otu <- read.csv("data/OTU表_抽平.csv", row.names = 1, check.names = FALSE)
+otu <- data.frame(t(otu))
+
+otu$sum <- rowSums(otu)
+otu_XD <- otu/otu$sum
+otu_XD <- subset(otu_XD, select = -sum)
+
+year <- read.xlsx("data/yearall2.xlsx", header = TRUE, sheetName = "YEAR")
+group <- select(year, Sample, season, treat, layer)
+group <- group[group$Sample %in% rownames(otu), ]
+group$SL <- paste(group$season, group$layer, sep = " ")
+
+otu_dis <- vegdist(otu_XD, method = "bray")
+otu_pcoa <- pcoa(otu_dis, correction = "none")
+head(otu_pcoa$values)
+# biplot(otu_pcoa)
+
+otu_pcoa_ano <- with(group, anosim(otu_dis, group$SL))
+summary(otu_pcoa_ano)
+# plot(otu_pcoa_ano)
+
+PcoA_P <- round(otu_pcoa_ano$signif, 4)
+PcoA_R <- round(otu_pcoa_ano$statistic, 4)
+PcoA_data <- data.frame(otu_pcoa$vectors[, 1:2])
+colnames(PcoA_data) <- c("x", "y")
+eig <- as.numeric(otu_pcoa$values[, 1])
+
+PcoA_data <- cbind(PcoA_data, group)
+
+p <- ggplot(PcoA_data, aes(x = x, y = y)) + 
+  geom_point(aes(shape = layer, fill = season, color = season), size = 6) +
+  stat_ellipse(aes(group = layer), level = 0.9) + 
+  
+  labs(x = paste("PCoA1 (", format(100 * eig[1] / sum(eig), digits = 4), "%)", sep = ""), 
+       y = paste("PCoA2 (", format(100 * eig[2] / sum(eig), digits = 4), "%)", sep = "")) +
+  
+  geom_hline(yintercept = 0, linetype = 3, size = 1) + 
+  geom_vline(xintercept = 0, linetype = 3, size = 1) + 
+  
+  annotate("text", x = -0.25, y = 0.3, parse = TRUE, label = "`Anosim:`", color = "black", size = 4) +
+  annotate("text", x = -0.20, y = 0.25, parse = TRUE, label = paste("R == ", PcoA_R), color = "black", size = 3) +
+  annotate("text", x = -0.203, y = 0.20, parse = TRUE, label = paste("P == ", PcoA_P), color = "black", size = 3)+
+  
+  guides(shape = guide_legend(title = "Treatment", override.aes = list(size = 6), order = 1, title.position = "top"),
+         fill = guide_legend(title = "Season", override.aes = list(size = 6), order = 2, title.position = "top"), 
+         color = guide_legend(title = "Season", override.aes = list(size = 6), order = 2, title.position = "top")) +
+  
+  scale_shape_manual(values = c(22, 21), breaks = c("0-2 cm", "2-5 cm"), labels = c("Biocrust", "Biocrust-removal")) +
+  scale_fill_manual(values = c("#4682B4", "#A0522D"), breaks = c("Winter", "Summer"), labels = c("Winter", "Summer")) +
+  scale_color_manual(values = c("#4682B4", "#A0522D"), breaks = c("Winter", "Summer"), labels = c("Winter", "Summer")) +
+  
+  theme_bw(base_size = 12) +
+  theme(legend.position = "top",
+        panel.grid = element_blank(), 
+        axis.title = element_text(face = "bold"))  
+
+# 添加permanova表格
+library(ggpp)
+library(tibble)
+library(xlsx)
+library(tidyverse)
+library(formattable)
+library(vegan)
+
+# 读入OTU数据
+otu <- read.csv("data/OTU表_抽平.csv", row.names = 1, check.names = FALSE)
+otu <- data.frame(t(otu))
+
+year <- read.xlsx("data/yearall2.xlsx", header = TRUE, sheetName = "YEAR")
+group <- select(year, Sample, season, treat, layer)
+group <- group[group$Sample %in% rownames(otu), ]
+
+set.seed(123)
+adonis_result <- adonis(otu ~ season * layer, group, permutations = 999, distance = "bray")
+adonis_result
+
+adonis_result_output <- data.frame(adonis_result$aov.tab, check.names = FALSE)
+
+adonis_result_output <- cbind(rownames(adonis_result_output), adonis_result_output)
+
+names(adonis_result_output) <- c(" ", "Df", "Sums of squares", "Mean squares", 
+                                 "F.Model", "Variation (R2)", "Pr (>F)")
+
+p2star <- function(p){
+  symnum(p, cutpoints = c(0, 0.001, 0.01, 0.05, 1), 
+         symbols = c("***", "**", "*", "" ), na = NA)
+}
+
+adonis_result_output$sig <- p2star(adonis_result_output$`Pr (>F)`)
+rownames(adonis_result_output) <- NULL
+
+permanova <- adonis_result_output[, c(1:2, 5:8)]
+permanova[, 3:4] <- round(permanova[, 3:4], 4)
+permanova[is.na(permanova)] <- ""
+
+permanova[, 1] <- c("Season", "Treat", "Season:Treat", "Residuals", "Total" )
+
+permanova
+
+# df <- tibble(x = -0.3, y = -0.35, tb = list(permanova))
+# 
+# p_pcoa <- p + geom_table(data = df, aes(x = x, y = y, label = tb), table.theme = ttheme_gtbw, cex = 3.0)
+
+ggarrange(p_alpha, p, nrow = 2, ncol = 1,
+          labels = c("A", "B"), align = "hv", heights = c(0.7, 1), 
+          font.label = list(color = "red", size = 20, face = "bold"))
+
+pdf("图3.pdf", width = 6, height = 7)
+ggarrange(p_alpha, p, nrow = 2, ncol = 1,
+          labels = c("A", "B"), align = "hv", heights = c(0.7, 1), 
+          font.label = list(color = "red", size = 20, face = "bold"))
+dev.off()
+```
+
+>Fig. 3
+
+\newpage
+
+```{r Tree, fig.width = 20, fig.height = 20}
+# Bioconductor包安装器
+if (!requireNamespace("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
+
+# 检查bioconductor来源包是否需要安装
+if (!requireNamespace("ggtree", quietly = TRUE))
+  BiocManager::install("ggtree")
+
+library(xlsx)
+library(tidyr)
+library(dplyr)
+library(ggtree)
+library(ggplot2)
+library(stringr)
+
+tree <- read.tree("tree/Newick Export.nwk")
+
+tree$tip.label <- str_replace_all(tree$tip.label, "_", " ")
+tree$tip.label <- str_replace_all(tree$tip.label, "Nitrososphaera sister", "N'sister")
+
+otu <- read.csv("data/OTU表_抽平.csv", row.names = 1, check.names = FALSE)
+
+p1 <- ggtree(tree, layout = "fan", open.angle = 13, ladderize = FALSE, branch.length = "none") + 
+  # geom_text(aes(label = node)) + 
+  # Nitrososphaera cluster
+  geom_hilight(node =  1:10, fill = "#5F9EA0", extend = 11) +
+  geom_hilight(node = 13:16, fill = "#5F9EA0", extend = 11) +
+  geom_hilight(node = 23:34, fill = "#5F9EA0", extend = 11) +
+  geom_hilight(node = 41:46, fill = "#5F9EA0", extend = 11) +
+  geom_hilight(node = 48:58, fill = "#5F9EA0", extend = 11) +
+  # Nitrososphaera sister cluster
+  geom_hilight(node = 17:22, fill = "#DDA0DD", extend = 11) +
+  # Nitrosocaldus cluster
+  geom_hilight(node = 35:36, fill = "#00FFFF", extend = 11) +
+  # Nitrosopumilus cluster
+  geom_hilight(node = 37:38, fill = "#DAA520", extend = 11) +
+  # Nitrosotalea cluster
+  geom_hilight(node = 39:40, fill = "#4169E1", extend = 11) +
+  # # Unclassified 11:12,47,59:82
+  # geom_hilight(node = 11:12, fill = "#A9A9A9", extend = 11) +
+  # geom_hilight(node =    47, fill = "#A9A9A9", extend = 11) +
+  # geom_hilight(node = 59:82, fill = "#A9A9A9", extend = 11) +
+  geom_tiplab2(size = 4.7, offset = 0.3) +
+  geom_treescale(5, 0, width = 5, linesize = 2, fontsize = 8, color = "#CD5C5C") +
+  xlim(NA, 35) +
+  theme(plot.margin = unit(rep(-6.5, 4), "cm"))
+
+tree_tip <- as.data.frame(tree$tip.label)
+colnames(tree_tip) <- "OTU"
+# 写入csv后手动检索分类
+# write.csv(tree_tip, "tree_tip.csv", row.names = F, quote = F) 
+
+tree_tip_group <- read.csv("data/tree_tip.csv", header = T)
+
+tree_tip_group$Taxa <- factor(tree_tip_group$Taxa, 
+                              levels = c("Nitrosocaldus cluster", "Nitrosopumilus cluster", 
+                                         "Nitrosotalea cluster", "Nitrososphaera cluster", 
+                                         "N'sister cluster", "Unclassified"))
+
+p2 <- p1 %<+% tree_tip_group + 
+  geom_tippoint(aes(color = Taxa, size = 2)) + 
+  scale_color_manual(values = c("#00FFFF", "#DAA520", "#4169E1", "#5F9EA0", "#DDA0DD", "#A9A9A9")) +
+  guides(size = "none", 
+         color = guide_legend(override.aes = list(size = 6))) 
+
+year <- read.xlsx("data/yearall2.xlsx", header = TRUE, sheetName = "YEAR")
+group <- select(year, Sample, season, treat, layer)
+group <- group[group$Sample %in% colnames(otu), ]
+
+zero_one <- function(x){
+  x <- ifelse(x > 0, 1, 0)
+}
+
+otu_new <- zero_one(otu) %>% t() %>% as.data.frame()
+otu_new <- otu_new %>% dplyr::mutate(Sample = rownames(otu_new), .before = OTU1)
+
+otu_new_group <- left_join(group, otu_new, by = "Sample") %>% 
+  select(-Sample, -treat)
+
+otu_new_group_1 <- otu_new_group[otu_new_group$season == "Winter" & otu_new_group$layer == "0-2 cm", ]
+otu_new_group_1 <- colSums(select(otu_new_group_1, -season, -layer))
+otu_new_group_2 <- otu_new_group[otu_new_group$season == "Summer" & otu_new_group$layer == "0-2 cm", ]
+otu_new_group_2 <- colSums(select(otu_new_group_2, -season, -layer))
+otu_new_group_3 <- otu_new_group[otu_new_group$season == "Winter" & otu_new_group$layer == "2-5 cm", ]
+otu_new_group_3 <- colSums(select(otu_new_group_3, -season, -layer))
+otu_new_group_4 <- otu_new_group[otu_new_group$season == "Summer" & otu_new_group$layer == "2-5 cm", ]
+otu_new_group_4 <- colSums(select(otu_new_group_4, -season, -layer))
+
+otu_group <- rbind(otu_new_group_1, otu_new_group_2, otu_new_group_3, otu_new_group_4)
+otu_group <- t(otu_group)
+colnames(otu_group) <- c("Winter Biocrust", "Summer Biocrust", "Winter Biocrust-removal", "Summer Biocrust-removal")
+otu_group <- as.data.frame(zero_one(otu_group))
+otu_group <- otu_group %>% mutate(OTU = rownames(otu_group))
+otu_group <- left_join(otu_group, tree_tip_group, by = "OTU")
+
+otu_taxa <- select(otu_group, OTU, Taxa)
+write.csv(otu_taxa, "data/otu_taxa.csv", row.names = FALSE)
+
+otu_sample <- select(otu_group, OTU, 1:4)
+write.csv(otu_sample, "data/otu_sample.csv", row.names = FALSE)
+
+otu_group_map <- otu_group[, 1:4]
+rownames(otu_group_map) <- otu_group$OTU
+otu_group_map <- ifelse(otu_group_map == 0, "Absence", "Presence")
+
+p3 <- gheatmap(p2, otu_group_map, offset = 10, width = 0.22, font.size = 5, 
+               colnames_angle = 86, colnames_offset_x = -0.2, colnames_offset_y = 84) + 
+  scale_fill_manual(labels = c("Absence", "Presence", "Indicator"), 
+                    values = c("#F5F5DC", "#90EE90", "#FFFFFF")) + 
+  guides(fill = guide_legend(title = "Existence"), override.aes = list(size = 6)) +
+  theme(legend.position = c(0.8, 0.15), 
+        legend.box = "horizontal",
+        legend.box.just = "bottom",
+        legend.title = element_text(size = 18), 
+        legend.text = element_text(size = 15))
+p3
+
+pdf("图4.pdf", width = 20, height = 20)
+p3
+dev.off()
+```
+
+>Fig. 4
+
+\newpage
+
+```{r MIC}
+# 检查bioconductor来源包是否需要安装
+if (!requireNamespace("edgeR", quietly = TRUE))
+  BiocManager::install("edgeR")
+
+library(dplyr)
+library(minerva)
+library(edgeR)
+
+# 读入OTU数据
+otu <- read.csv("data/OTU表_抽平.csv", row.names = 1, check.names = FALSE)
+
+# 读入分类信息
+otu_taxa <- read.csv("data/otu_taxa.csv", header = TRUE)
+
+# 定义分组颜色
+otu_taxa <- mutate(otu_taxa, 
+                   col = if_else(otu_taxa$Taxa == "Nitrososphaera cluster", "#5F9EA0", 
+                                 ifelse(otu_taxa$Taxa == "N'sister cluster", "#DDA0DD", "#A9A9A9")))
+
+# 读取子网络提取OTU信息
+otu_sample <- read.csv("data/otu_sample.csv", header = TRUE, check.names = FALSE)
+
+# 总网络 ---------------------------------------------------------------------
+edgeR_year_otu <- DGEList(counts = otu)
+# CPM标准化
+norm_year_otu <- cpm(edgeR_year_otu, normalized.lib.sizes = TRUE, log = FALSE)
+
+# 转置成行是样本，列是OTU
+mic_year_otu <- t(norm_year_otu)
+
+# 调用 MINE 程序，详情 ?mine
+# MINE 的计算比较消耗资源，如果数据量较大需要等待较长时间
+# n.cores 参数可以设置多线程运行，加速计算
+set.seed(123)
+res <- mine(mic_year_otu, normalization = FALSE, n.cores = 12)
+
+#MIC 矩阵
+mic <- res$MIC
+
+# 计算每次置换后数据计算的 MIC（micN），并统计 micN > mic 的频数
+n <- 999
+p_num <- mic  #如上所述，mic 是观测值的 MIC
+p_num[abs(p_num) > 0] <- 1
+ 
+set.seed(123)
+for (i in 1:n) {
+    random <- apply(mic_year_otu, 2, sample)
+    micN <- mine(random, normalization = FALSE, n.cores = 12)$MIC
+
+    micN[abs(micN) >= abs(mic)] <- 1
+    micN[abs(micN) < abs(mic)] <- 0
+    p_num <- p_num + micN
+}
+ 
+# p 值矩阵，即 |micN|>|mic| 的概率
+p <- p_num/(n+1)
+
+# 保留 p<0.05 所对应的 MIC 值
+mic[p >= 0.05] <- 0
+
+diag(mic) <- NA
+
+write.csv(mic, "data/mic.csv", quote = FALSE) 
+```
+
+```{r network, fig.height = 18, fig.width = 18}
+# 检查包是否需要安装
+if (!requireNamespace("mmtable2", quietly = TRUE))
+  remotes::install_github("ianmoran11/mmtable2")
+
+library(xlsx)
+library(tidyr)
+library(purrr)
+library(tidyverse)
+library(plyr)
+library(Hmisc)
+library(igraph) 
+library(mmtable2)
+library(gt)
+library(formattable)
+library(ggsci)
+
+mic <- read.csv("data/mic.csv", row.names = 1)
+
+# 基于OTU表格进行OTU的两两Spearman相关计算
+year_otu_cor <- rcorr(t(norm_year_otu), type = c("spearman"))
+
+## 邻接矩阵转化为边表
+CorrDF <- function(cormat, pmat) {
+  ut <- upper.tri(cormat)
+  data.frame(
+    from = rownames(cormat)[col(cormat)[ut]], 
+    to = rownames(cormat)[row(cormat)[ut]], 
+    mic = (cormat)[ut], 
+    cor = pmat[ut]
+  )
+}
+
+year_otu_df <- CorrDF(mic, year_otu_cor$r)
+
+# 使用MIC作为相关性关系，cor确认关系正负
+
+# p值校正，常用fdr/bonferroni/BH，如果显著极少也可用none
+# 此测序数据仅为12个样本，P值偏大，暂不校正
+# method可选c("holm", "hochberg", "hommel", "bonferroni", "BH", "BY", "fdr", "none")
+# year_otu_df$padj <- p.adjust(year_otu_df$p, method = "BH")
+
+# 取Spearman"s rho > 0.6且p-value < 0.05的关系作为入选共现性网络co-occurence network的边
+# year_otu_df_padj <- year_otu_df[which(abs(year_otu_df$cor) > 0.6), ]
+# year_otu_df_padj <- year_otu_df_padj[which(year_otu_df_padj$padj < 0.05), ]
+
+year_otu_df_mic <- year_otu_df[which(abs(year_otu_df$cor) > 0.6), ]
+year_otu_df_mic <- year_otu_df_mic[which(year_otu_df_mic$mic != 0), ]
+
+year_otu_df_mic <- arrange(year_otu_df_mic, desc(cor)) %>% 
+  mutate(col = ifelse(cor > 0, "#DC143C", "#00FF00"))
+
+# 生成node列表和属性
+# 边两列点取交集为结点
+node_otu <- data.frame(node = union(year_otu_df_mic$from, year_otu_df_mic$to))
+
+# 用igraph绘制共现性网络图co-occurence network
+net_otu <- graph_from_data_frame(year_otu_df_mic, direct = FALSE, vertices = node_otu)
+
+# 聚类分社群
+# net_otu_clu <- cluster_fast_greedy(net_otu)
+
+otu_taxa_otu <- otu_taxa[otu_taxa$OTU %in% node_otu$node, ] %>% dplyr::rename(node = OTU)
+node_otu_col <- left_join(node_otu, otu_taxa_otu, by = "node")
+
+V(net_otu)$size <- igraph::degree(net_otu)/2
+V(net_otu)$color <- node_otu_col$col
+V(net_otu)$shape <- "circle"
+# 设置点边框与点颜色相同
+V(net_otu)$frame.color <- V(net_otu)$color
+# 设置degree ≥网络平均值就显示标签
+V(net_otu)$label = NA
+V(net_otu)[igraph::degree(net_otu) > mean(igraph::degree(net_otu))]$label = V(net_otu)[igraph::degree(net_otu) > mean(igraph::degree(net_otu))]$name
+
+# 设置线的颜色
+E(net_otu)$color <- year_otu_df_mic$col
+# 归一化函数
+max_min <- function(x){
+  x <- (x-min(x))/(max(x)-min(x))
+}
+# 设置线的粗细
+E(net_otu)$width <- max_min(abs(year_otu_df_mic$mic)) * 3
+
+pdf("图5.pdf", width = 18, height = 18)
+
+layout(matrix(c(1, 2, 3, 4, 5, 5), nrow = 3, ncol = 2, byrow = TRUE), height = c(5, 5, 1.5))
+par(oma = c(0, 0, 0, 0), mar = c(1, 1, 1, 1))
+
+
+# Winter 0-2 cm -----------------------------------------------------------
+
+otu_sample_1 <- select(otu_sample, 1, 2)
+otu_sample_1 <- otu_sample_1[otu_sample_1$`Winter Biocrust` == 1, ]
+vec_1 <- otu_sample_1$OTU[otu_sample_1$OTU %in% names(V(net_otu))]
+
+net_otu_1 <- induced_subgraph(net_otu, vids = vec_1)
+
+# 聚类分社群
+net_otu_1_clu <- cluster_fast_greedy(net_otu_1)
+
+# 社群颜色设置
+mark_col <- pal_npg(alpha = 0.4)(9)[2:5]
+
+V(net_otu_1)$size <- igraph::degree(net_otu_1)
+
+# 设置degree ≥网络平均值就显示标签
+V(net_otu_1)$label = NA
+V(net_otu_1)[igraph::degree(net_otu_1) > mean(igraph::degree(net_otu_1))]$label = V(net_otu_1)[igraph::degree(net_otu_1) > mean(igraph::degree(net_otu_1))]$name
+
+set.seed(1)
+plot(net_otu_1, 
+     layout = layout_nicely, 
+     vertex.label.color = V(net_otu_1)$color, 
+     vertex.label.cex = 2, #标签缩放
+     vertex.label.dist = 1, #标签位置, 偏移距离
+     vertex.label.degree = -pi/2, # 标签位置， 上下左右偏移
+     edge.curved = 0.2, # 线的弯曲程度，取值0-1，0为不弯曲
+     mark.groups = list(V(net_otu_1)[(net_otu_1_clu$membership == 1)],
+                        V(net_otu_1)[(net_otu_1_clu$membership == 2)],
+                        V(net_otu_1)[(net_otu_1_clu$membership == 3)],
+                        V(net_otu_1)[(net_otu_1_clu$membership == 4)]),
+     mark.col = mark_col, mark.border = mark_col, mark.expand = 10)
+box(which = "plot", col = "#4682B4", lwd = 5, lty = 1)
+
+# 选择一些网络拓扑特征做统计描述，例如
+node_num <- vcount(net_otu_1)    #节点数量
+edge_num <- plyr::count(E(net_otu_1)$color == "#DC143C")
+posi_edge_num <- edge_num[edge_num$x == TRUE, "freq"]      #正相关边的数量
+nega_edge_num <- edge_num[edge_num$x == FALSE, "freq"]     #负相关边的数量
+
+V(net_otu_1)$degree <- igraph::degree(net_otu_1) 
+average_degree <- round(mean(igraph::degree(net_otu_1)), 3)    #节点平均度
+
+net_otu_1_fc <- cluster_fast_greedy(net_otu_1)
+modularity <- modularity(net_otu_1, membership(net_otu_1_fc))    #模块性（modularity）
+
+clustering_coefficient <- transitivity(net_otu_1)     #聚类系数（clustering coefficient）
+average_path_length <- average.path.length(net_otu_1, directed = FALSE)    #平均路径长度
+
+# 汇总输出
+net_otu_1_df <- data.frame(
+  "Node" = node_num,               #节点数量（number of nodes）
+  "Positive edge" = posi_edge_num,          #正相关边数量
+  "Negative edge" = nega_edge_num,          #负相关边数量
+  "Average degree" = round(average_degree, 3),         #节点平均度（average degree)
+  "Modularity" = round(modularity, 3),             #模块性（modularity）
+  "Clustering coefficient" = round(clustering_coefficient, 3), #聚类系数（clustering coefficient）
+  "Average path length" = round(average_path_length, 3),    #平均路径长度（average path length）
+  row.names = "Winter Biocrust", check.names = FALSE)
+
+
+# Summer 0-2 cm -----------------------------------------------------------
+
+otu_sample_2 <- select(otu_sample, 1, 3)
+otu_sample_2 <- otu_sample_2[otu_sample_2$`Summer Biocrust` == 1, ]
+vec_2 <- otu_sample_2$OTU[otu_sample_2$OTU %in% names(V(net_otu))]
+
+net_otu_2 <- induced_subgraph(net_otu, vids = vec_2)
+
+# 聚类分社群
+net_otu_2_clu <- cluster_fast_greedy(net_otu_2)
+
+# 社群颜色设置
+mark_col <- pal_npg(alpha = 0.4)(9)[2:5]
+
+V(net_otu_2)$size <- igraph::degree(net_otu_2)
+
+# 设置degree ≥网络平均值就显示标签
+V(net_otu_2)$label = NA
+V(net_otu_2)[igraph::degree(net_otu_2) > mean(igraph::degree(net_otu_2))]$label = V(net_otu_2)[igraph::degree(net_otu_2) > mean(igraph::degree(net_otu_2))]$name
+
+set.seed(1)
+plot(net_otu_2, 
+     layout = layout_nicely, 
+     vertex.label.color = V(net_otu_2)$color, 
+     vertex.label.cex = 2, #标签缩放
+     vertex.label.dist = 1, #标签位置, 偏移距离
+     vertex.label.degree = -pi/2, # 标签位置， 上下左右偏移
+     edge.curved = 0.2, # 线的弯曲程度，取值0-1，0为不弯曲
+     mark.groups = list(V(net_otu_2)[(net_otu_2_clu$membership == 1)],
+                        V(net_otu_2)[(net_otu_2_clu$membership == 2)],
+                        V(net_otu_2)[(net_otu_2_clu$membership == 3)],
+                        V(net_otu_2)[(net_otu_2_clu$membership == 4)]),
+     mark.col = mark_col, mark.border = mark_col, mark.expand = 10)
+box(which = "plot", col = "#A0522D", lwd = 5, lty = 1)
+
+# 选择一些网络拓扑特征做统计描述，例如
+node_num <- vcount(net_otu_2)    #节点数量
+edge_num <- plyr::count(E(net_otu_2)$color == "#DC143C")
+posi_edge_num <- edge_num[edge_num$x == TRUE, "freq"]      #正相关边的数量
+nega_edge_num <- edge_num[edge_num$x == FALSE, "freq"]     #负相关边的数量
+
+V(net_otu_2)$degree <- igraph::degree(net_otu_2)    
+average_degree <- round(mean(igraph::degree(net_otu_2)), 3)    #节点平均度
+
+net_otu_2_fc <- cluster_fast_greedy(net_otu_2)
+modularity <- modularity(net_otu_2, membership(net_otu_2_fc))    #模块性（modularity）
+
+clustering_coefficient <- transitivity(net_otu_2)     #聚类系数（clustering coefficient）
+average_path_length <- average.path.length(net_otu_2, directed = FALSE)    #平均路径长度
+
+# 汇总输出
+net_otu_2_df <- data.frame(
+  "Node" = node_num,               #节点数量（number of nodes）
+  "Positive edge" = posi_edge_num,          #正相关边数量
+  "Negative edge" = nega_edge_num,          #负相关边数量
+  "Average degree" = round(average_degree, 3),         #节点平均度（average degree)
+  "Modularity" = round(modularity, 3),             #模块性（modularity）
+  "Clustering coefficient" = round(clustering_coefficient, 3), #聚类系数（clustering coefficient）
+  "Average path length" = round(average_path_length, 3),    #平均路径长度（average path length）
+  row.names = "Summer Biocrust", check.names = FALSE)
+
+
+# Winter 2-5 cm -----------------------------------------------------------
+
+otu_sample_3 <- select(otu_sample, 1, 4)
+otu_sample_3 <- otu_sample_3[otu_sample_3$`Winter Biocrust-removal` == 1, ]
+vec_3 <- otu_sample_3$OTU[otu_sample_3$OTU %in% names(V(net_otu))]
+
+net_otu_3 <- induced_subgraph(net_otu, vids = vec_3)
+
+# 聚类分社群
+net_otu_3_clu <- cluster_fast_greedy(net_otu_3)
+
+# 社群颜色设置
+mark_col <- pal_npg(alpha = 0.4)(9)[2:5]
+
+V(net_otu_3)$size <- igraph::degree(net_otu_3)
+
+# 设置degree ≥网络平均值就显示标签
+V(net_otu_3)$label = NA
+V(net_otu_3)[igraph::degree(net_otu_3) > mean(igraph::degree(net_otu_3))]$label = V(net_otu_3)[igraph::degree(net_otu_3) > mean(igraph::degree(net_otu_3))]$name
+
+set.seed(1)
+plot(net_otu_3, 
+     layout = layout_nicely, 
+     vertex.label.color = V(net_otu_3)$color, 
+     vertex.label.cex = 2, #标签缩放
+     vertex.label.dist = 1, #标签位置, 偏移距离
+     vertex.label.degree = -pi/2, # 标签位置， 上下左右偏移
+     edge.curved = 0.2, # 线的弯曲程度，取值0-1，0为不弯曲
+     mark.groups = list(V(net_otu_3)[(net_otu_3_clu$membership == 1)],
+                        V(net_otu_3)[(net_otu_3_clu$membership == 2)],
+                        V(net_otu_3)[(net_otu_3_clu$membership == 3)]),
+     mark.col = mark_col, mark.border = mark_col, mark.expand = 10)
+box(which = "plot", col = "#4682B4", lwd = 5, lty = 2)
+
+# 选择一些网络拓扑特征做统计描述，例如
+node_num <- vcount(net_otu_3)    #节点数量
+edge_num <- plyr::count(E(net_otu_3)$color == "#DC143C")
+posi_edge_num <- edge_num[edge_num$x == TRUE, "freq"]      #正相关边的数量
+nega_edge_num <- edge_num[edge_num$x == FALSE, "freq"]     #负相关边的数量
+
+V(net_otu_3)$degree <- igraph::degree(net_otu_3)    
+average_degree <- round(mean(igraph::degree(net_otu_3)), 3)    #节点平均度
+
+net_otu_3_fc <- cluster_fast_greedy(net_otu_3)
+modularity <- modularity(net_otu_3, membership(net_otu_3_fc))    #模块性（modularity）
+
+clustering_coefficient <- transitivity(net_otu_3)     #聚类系数（clustering coefficient）
+average_path_length <- average.path.length(net_otu_3, directed = FALSE)    #平均路径长度
+
+# 汇总输出
+net_otu_3_df <- data.frame(
+  "Node" = node_num,               #节点数量（number of nodes）
+  "Positive edge" = posi_edge_num,          #正相关边数量
+  "Negative edge" = nega_edge_num,          #负相关边数量
+  "Average degree" = round(average_degree, 3),         #节点平均度（average degree)
+  "Modularity" = round(modularity, 3),             #模块性（modularity）
+  "Clustering coefficient" = round(clustering_coefficient, 3), #聚类系数（clustering coefficient）
+  "Average path length" = round(average_path_length, 3),    #平均路径长度（average path length）
+  row.names = "Winter Biocrust-removal", check.names = FALSE)
+
+
+# Summer 2-5 cm -----------------------------------------------------------
+
+otu_sample_4 <- select(otu_sample, 1, 5)
+otu_sample_4 <- otu_sample_4[otu_sample_4$`Summer Biocrust-removal` == 1, ]
+vec_4 <- otu_sample_4$OTU[otu_sample_4$OTU %in% names(V(net_otu))]
+
+net_otu_4 <- induced_subgraph(net_otu, vids = vec_4)
+
+# 聚类分社群
+net_otu_4_clu <- cluster_fast_greedy(net_otu_4)
+
+# 社群颜色设置
+mark_col <- pal_npg(alpha = 0.4)(9)[2:5]
+
+V(net_otu_4)$size <- igraph::degree(net_otu_4)
+
+# 设置degree ≥网络平均值就显示标签
+V(net_otu_4)$label = NA
+V(net_otu_4)[igraph::degree(net_otu_4) > mean(igraph::degree(net_otu_4))]$label = V(net_otu_4)[igraph::degree(net_otu_4) > mean(igraph::degree(net_otu_4))]$name
+
+set.seed(1)
+plot(net_otu_4, 
+     layout = layout_nicely, 
+     vertex.label.color = V(net_otu_4)$color, 
+     vertex.label.cex = 2, #标签缩放
+     vertex.label.dist = 1, #标签位置, 偏移距离
+     vertex.label.degree = -pi/2, # 标签位置， 上下左右偏移
+     edge.curved = 0.2, # 线的弯曲程度，取值0-1，0为不弯曲
+     mark.groups = list(V(net_otu_4)[(net_otu_4_clu$membership == 1)],
+                        V(net_otu_4)[(net_otu_4_clu$membership == 2)],
+                        V(net_otu_4)[(net_otu_4_clu$membership == 3)]),
+     mark.col = mark_col, mark.border = mark_col, mark.expand = 10)
+box(which = "plot", col = "#A0522D", lwd = 5, lty = 2)
+
+# 选择一些网络拓扑特征做统计描述，例如
+node_num <- vcount(net_otu_4)    #节点数量
+edge_num <- plyr::count(E(net_otu_4)$color == "#DC143C")
+posi_edge_num <- edge_num[edge_num$x == TRUE, "freq"]      #正相关边的数量
+nega_edge_num <- edge_num[edge_num$x == FALSE, "freq"]     #负相关边的数量
+
+V(net_otu_4)$degree <- igraph::degree(net_otu_4)    
+average_degree <- round(mean(igraph::degree(net_otu_4)), 3)    #节点平均度
+
+net_otu_4_fc <- cluster_fast_greedy(net_otu_4)
+modularity <- modularity(net_otu_4, membership(net_otu_4_fc))    #模块性（modularity）
+
+clustering_coefficient <- transitivity(net_otu_4)     #聚类系数（clustering coefficient）
+average_path_length <- average.path.length(net_otu_4, directed = FALSE)    #平均路径长度
+
+# 汇总输出
+net_otu_4_df <- data.frame(
+  "Node" = node_num,               #节点数量（number of nodes）
+  "Positive edge" = posi_edge_num,          #正相关边数量
+  "Negative edge" = nega_edge_num,          #负相关边数量
+  "Average degree" = round(average_degree, 3),         #节点平均度（average degree)
+  "Modularity" = round(modularity, 3),             #模块性（modularity）
+  "Clustering coefficient" = round(clustering_coefficient, 3), #聚类系数（clustering coefficient）
+  "Average path length" = round(average_path_length, 3),    #平均路径长度（average path length）
+  row.names = "Summer Biocrust-removal", check.names = FALSE)
+
+
+# 占位图 ---------------------------------------------------------------------
+x = 0
+y = 0
+plot(x, y, type = "n", axes = FALSE) # 报错不影响图
+
+# 图例
+legend(x = -1, y = 1.2, pch = 0, pt.cex = 2.5, bty = "n", col = c("#4682B4", "#A0522D", "#4682B4", "#A0522D"),
+       legend = c("Winter Biocrust", "Summer Biocrust", "Winter Biocrust-removal", "Summer Biocrust-removal"), lty = c(1, 1, 2, 2),
+       lwd = 2, seg.len = 1.5, x.intersp = 0.5, y.intersp = 1, cex = 2.8, title = "Sample", title.adj = 0)
+
+legend(x = -0.5, y = 1.2, pch = 19, pt.cex = 2.5, bty = "n", col = c("#5F9EA0", "#DDA0DD", "#A9A9A9"),
+       legend = c("Nitrososphaera cluster", "Nitrososphaera sister cluster", "Unclassified"),
+       x.intersp = 0.8, y.intersp = 1, cex = 2.8, title = "Taxa", title.adj = 0.05)
+
+legend(x = 0.05, y = 1.2, legend = c("Positive", "Negative"), col = c("#DC143C", "#00FF00"),
+       lwd = 4, bty = "n", x.intersp = 0.8, y.intersp = 1, cex = 2.8, seg.len = 1.5,
+       title = "Cor", title.adj = 0.15)
+
+legend(x = 0.08, y = -0.1, legend = c("Degree > mean(degree)"), bty = "n", pch = "a", lwd = 2,
+       seg.len = 1.5, x.intersp = 0.5, y.intersp = 1, cex = 2.8, title = "Lable", title.adj = 0.025)
+
+legend(x = 0.58, y = 1.2, legend = seq(1, 12, 3), pch = 19, col = "gray30", pt.cex = seq(0.6, 5, 0.7),
+       bty = "n", x.intersp = 0.8, y.intersp = 1, cex = 2.8, title = "Degree", title.adj = 1)
+
+legend(x = 0.75, y = 1.2, pch = 15, pt.cex = 2.5, bty = "n", col = pal_npg(alpha = 0.4)(9)[2:5],
+       legend = c("Module 1", "Module 2", "Module 3", "Module 4"),
+       x.intersp = 0.8, y.intersp = 1, cex = 2.8, title = "Module", title.adj = 0.2)
+
+dev.off()
+
+`Winter Biocrust` <- names(sort(rowSums(as.matrix(net_otu_1[1:length(net_otu_1)])), decreasing = TRUE)[1:10])
+class <- otu_taxa$Taxa[match(`Winter Biocrust`, otu_taxa$OTU)]
+`Winter Biocrust` <- str_remove(paste(`Winter Biocrust`, "(", class, ")", sep = ""), " cluster")
+
+`Summer Biocrust` <- names(sort(rowSums(as.matrix(net_otu_2[1:length(net_otu_2)])), decreasing = TRUE)[1:10])
+class <- otu_taxa$Taxa[match(`Summer Biocrust`, otu_taxa$OTU)]
+`Summer Biocrust` <- str_remove(paste(`Summer Biocrust`, "(", class, ")", sep = ""), " cluster")
+
+`Winter Biocrust−removal` <- names(sort(rowSums(as.matrix(net_otu_3[1:length(net_otu_3)])), decreasing = TRUE)[1:10])
+class <- otu_taxa$Taxa[match(`Winter Biocrust−removal`, otu_taxa$OTU)]
+`Winter Biocrust−removal` <- str_remove(paste(`Winter Biocrust−removal`, "(", class, ")", sep = ""), " cluster")
+
+
+`Summer Biocrust−removal` <- names(sort(rowSums(as.matrix(net_otu_4[1:length(net_otu_4)])), decreasing = TRUE)[1:10])
+class <- otu_taxa$Taxa[match(`Summer Biocrust−removal`, otu_taxa$OTU)]
+`Summer Biocrust−removal` <- str_remove(paste(`Summer Biocrust−removal`, "(", class, ")", sep = ""), " cluster")
+
+table4 <- cbind(`Winter Biocrust`, `Summer Biocrust`, `Winter Biocrust−removal`, `Summer Biocrust−removal`)
+rownames(table4) <- paste("top", 1:10, sep = "")
+
+write.csv(table4, "data/table4.csv")
+
+
+layout(matrix(c(1, 2, 3, 4, 5, 5), nrow = 3, ncol = 2, byrow = TRUE), height = c(5, 5, 1.5))
+par(oma = c(0, 0, 0, 0), mar = c(1, 1, 1, 1))
+
+# Winter 0-2 cm -----------------------------------------------------------
+
+otu_sample_1 <- select(otu_sample, 1, 2)
+otu_sample_1 <- otu_sample_1[otu_sample_1$`Winter Biocrust` == 1, ]
+vec_1 <- otu_sample_1$OTU[otu_sample_1$OTU %in% names(V(net_otu))]
+
+net_otu_1 <- induced_subgraph(net_otu, vids = vec_1)
+
+# 聚类分社群
+net_otu_1_clu <- cluster_fast_greedy(net_otu_1)
+
+# 社群颜色设置
+mark_col <- pal_npg(alpha = 0.4)(9)[2:5]
+
+V(net_otu_1)$size <- igraph::degree(net_otu_1)
+
+# 设置degree ≥网络平均值就显示标签
+V(net_otu_1)$label = NA
+V(net_otu_1)[igraph::degree(net_otu_1) > mean(igraph::degree(net_otu_1))]$label = V(net_otu_1)[igraph::degree(net_otu_1) > mean(igraph::degree(net_otu_1))]$name
+
+set.seed(1)
+plot(net_otu_1, 
+     layout = layout_nicely, 
+     vertex.label.color = V(net_otu_1)$color, 
+     vertex.label.cex = 2, #标签缩放
+     vertex.label.dist = 1, #标签位置, 偏移距离
+     vertex.label.degree = -pi/2, # 标签位置， 上下左右偏移
+     edge.curved = 0.2, # 线的弯曲程度，取值0-1，0为不弯曲
+     mark.groups = list(V(net_otu_1)[(net_otu_1_clu$membership == 1)],
+                        V(net_otu_1)[(net_otu_1_clu$membership == 2)],
+                        V(net_otu_1)[(net_otu_1_clu$membership == 3)],
+                        V(net_otu_1)[(net_otu_1_clu$membership == 4)]),
+     mark.col = mark_col, mark.border = mark_col, mark.expand = 10)
+box(which = "plot", col = "#4682B4", lwd = 5, lty = 1)
+
+# 选择一些网络拓扑特征做统计描述，例如
+node_num <- vcount(net_otu_1)    #节点数量
+edge_num <- plyr::count(E(net_otu_1)$color == "#DC143C")
+posi_edge_num <- edge_num[edge_num$x == TRUE, "freq"]      #正相关边的数量
+nega_edge_num <- edge_num[edge_num$x == FALSE, "freq"]     #负相关边的数量
+
+V(net_otu_1)$degree <- igraph::degree(net_otu_1)    
+average_degree <- round(mean(igraph::degree(net_otu_1)), 3)    #节点平均度
+
+net_otu_1_fc <- cluster_fast_greedy(net_otu_1)
+modularity <- modularity(net_otu_1, membership(net_otu_1_fc))    #模块性（modularity）
+
+clustering_coefficient <- transitivity(net_otu_1)     #聚类系数（clustering coefficient）
+average_path_length <- average.path.length(net_otu_1, directed = FALSE)    #平均路径长度
+
+# 汇总输出
+net_otu_1_df <- data.frame(
+  "Node" = node_num,               #节点数量（number of nodes）
+  "Positive edge" = posi_edge_num,          #正相关边数量
+  "Negative edge" = nega_edge_num,          #负相关边数量
+  "Average degree" = round(average_degree, 3),         #节点平均度（average degree)
+  "Modularity" = round(modularity, 3),             #模块性（modularity）
+  "Clustering coefficient" = round(clustering_coefficient, 3), #聚类系数（clustering coefficient）
+  "Average path length" = round(average_path_length, 3),    #平均路径长度（average path length）
+  row.names = "Winter Biocrust", check.names = FALSE)
+
+
+# Summer 0-2 cm -----------------------------------------------------------
+
+otu_sample_2 <- select(otu_sample, 1, 3)
+otu_sample_2 <- otu_sample_2[otu_sample_2$`Summer Biocrust` == 1, ]
+vec_2 <- otu_sample_2$OTU[otu_sample_2$OTU %in% names(V(net_otu))]
+
+net_otu_2 <- induced_subgraph(net_otu, vids = vec_2)
+
+# 聚类分社群
+net_otu_2_clu <- cluster_fast_greedy(net_otu_2)
+
+# 社群颜色设置
+mark_col <- pal_npg(alpha = 0.4)(9)[2:5]
+
+V(net_otu_2)$size <- igraph::degree(net_otu_2)
+
+# 设置degree ≥网络平均值就显示标签
+V(net_otu_2)$label = NA
+V(net_otu_2)[igraph::degree(net_otu_2) > mean(igraph::degree(net_otu_2))]$label = V(net_otu_2)[igraph::degree(net_otu_2) > mean(igraph::degree(net_otu_2))]$name
+
+set.seed(1)
+plot(net_otu_2, 
+     layout = layout_nicely, 
+     vertex.label.color = V(net_otu_2)$color, 
+     vertex.label.cex = 2, #标签缩放
+     vertex.label.dist = 1, #标签位置, 偏移距离
+     vertex.label.degree = -pi/2, # 标签位置， 上下左右偏移
+     edge.curved = 0.2, # 线的弯曲程度，取值0-1，0为不弯曲
+     mark.groups = list(V(net_otu_2)[(net_otu_2_clu$membership == 1)],
+                        V(net_otu_2)[(net_otu_2_clu$membership == 2)],
+                        V(net_otu_2)[(net_otu_2_clu$membership == 3)],
+                        V(net_otu_2)[(net_otu_2_clu$membership == 4)]),
+     mark.col = mark_col, mark.border = mark_col, mark.expand = 10)
+box(which = "plot", col = "#A0522D", lwd = 5, lty = 1)
+
+# 选择一些网络拓扑特征做统计描述，例如
+node_num <- vcount(net_otu_2)    #节点数量
+edge_num <- plyr::count(E(net_otu_2)$color == "#DC143C")
+posi_edge_num <- edge_num[edge_num$x == TRUE, "freq"]      #正相关边的数量
+nega_edge_num <- edge_num[edge_num$x == FALSE, "freq"]     #负相关边的数量
+
+V(net_otu_2)$degree <- igraph::degree(net_otu_2)    
+average_degree <- round(mean(igraph::degree(net_otu_2)), 3)    #节点平均度
+
+net_otu_2_fc <- cluster_fast_greedy(net_otu_2)
+modularity <- modularity(net_otu_2, membership(net_otu_2_fc))    #模块性（modularity）
+
+clustering_coefficient <- transitivity(net_otu_2)     #聚类系数（clustering coefficient）
+average_path_length <- average.path.length(net_otu_2, directed = FALSE)    #平均路径长度
+
+# 汇总输出
+net_otu_2_df <- data.frame(
+  "Node" = node_num,               #节点数量（number of nodes）
+  "Positive edge" = posi_edge_num,          #正相关边数量
+  "Negative edge" = nega_edge_num,          #负相关边数量
+  "Average degree" = round(average_degree, 3),         #节点平均度（average degree)
+  "Modularity" = round(modularity, 3),             #模块性（modularity）
+  "Clustering coefficient" = round(clustering_coefficient, 3), #聚类系数（clustering coefficient）
+  "Average path length" = round(average_path_length, 3),    #平均路径长度（average path length）
+  row.names = "Summer Biocrust", check.names = FALSE)
+
+
+# Winter 2-5 cm -----------------------------------------------------------
+
+otu_sample_3 <- select(otu_sample, 1, 4)
+otu_sample_3 <- otu_sample_3[otu_sample_3$`Winter Biocrust-removal` == 1, ]
+vec_3 <- otu_sample_3$OTU[otu_sample_3$OTU %in% names(V(net_otu))]
+
+net_otu_3 <- induced_subgraph(net_otu, vids = vec_3)
+
+# 聚类分社群
+net_otu_3_clu <- cluster_fast_greedy(net_otu_3)
+
+# 社群颜色设置
+mark_col <- pal_npg(alpha = 0.4)(9)[2:5]
+
+V(net_otu_3)$size <- igraph::degree(net_otu_3)
+
+# 设置degree ≥网络平均值就显示标签
+V(net_otu_3)$label = NA
+V(net_otu_3)[igraph::degree(net_otu_3) > mean(igraph::degree(net_otu_3))]$label = V(net_otu_3)[igraph::degree(net_otu_3) > mean(igraph::degree(net_otu_3))]$name
+
+set.seed(1)
+plot(net_otu_3, 
+     layout = layout_nicely, 
+     vertex.label.color = V(net_otu_3)$color, 
+     vertex.label.cex = 2, #标签缩放
+     vertex.label.dist = 1, #标签位置, 偏移距离
+     vertex.label.degree = -pi/2, # 标签位置， 上下左右偏移
+     edge.curved = 0.2, # 线的弯曲程度，取值0-1，0为不弯曲
+     mark.groups = list(V(net_otu_3)[(net_otu_3_clu$membership == 1)],
+                        V(net_otu_3)[(net_otu_3_clu$membership == 2)],
+                        V(net_otu_3)[(net_otu_3_clu$membership == 3)]),
+     mark.col = mark_col, mark.border = mark_col, mark.expand = 10)
+box(which = "plot", col = "#4682B4", lwd = 5, lty = 2)
+
+# 选择一些网络拓扑特征做统计描述，例如
+node_num <- vcount(net_otu_3)    #节点数量
+edge_num <- plyr::count(E(net_otu_3)$color == "#DC143C")
+posi_edge_num <- edge_num[edge_num$x == TRUE, "freq"]      #正相关边的数量
+nega_edge_num <- edge_num[edge_num$x == FALSE, "freq"]     #负相关边的数量
+
+V(net_otu_3)$degree <- igraph::degree(net_otu_3)    
+average_degree <- round(mean(igraph::degree(net_otu_3)), 3)    #节点平均度
+
+net_otu_3_fc <- cluster_fast_greedy(net_otu_3)
+modularity <- modularity(net_otu_3, membership(net_otu_3_fc))    #模块性（modularity）
+
+clustering_coefficient <- transitivity(net_otu_3)     #聚类系数（clustering coefficient）
+average_path_length <- average.path.length(net_otu_3, directed = FALSE)    #平均路径长度
+
+# 汇总输出
+net_otu_3_df <- data.frame(
+  "Node" = node_num,               #节点数量（number of nodes）
+  "Positive edge" = posi_edge_num,          #正相关边数量
+  "Negative edge" = nega_edge_num,          #负相关边数量
+  "Average degree" = round(average_degree, 3),         #节点平均度（average degree)
+  "Modularity" = round(modularity, 3),             #模块性（modularity）
+  "Clustering coefficient" = round(clustering_coefficient, 3), #聚类系数（clustering coefficient）
+  "Average path length" = round(average_path_length, 3),    #平均路径长度（average path length）
+  row.names = "Winter Biocrust-removal", check.names = FALSE)
+
+
+# Summer 2-5 cm -----------------------------------------------------------
+
+otu_sample_4 <- select(otu_sample, 1, 5)
+otu_sample_4 <- otu_sample_4[otu_sample_4$`Summer Biocrust-removal` == 1, ]
+vec_4 <- otu_sample_4$OTU[otu_sample_4$OTU %in% names(V(net_otu))]
+
+net_otu_4 <- induced_subgraph(net_otu, vids = vec_4)
+
+# 聚类分社群
+net_otu_4_clu <- cluster_fast_greedy(net_otu_4)
+
+# 社群颜色设置
+mark_col <- pal_npg(alpha = 0.4)(9)[2:5]
+
+V(net_otu_4)$size <- igraph::degree(net_otu_4)
+
+# 设置degree ≥网络平均值就显示标签
+V(net_otu_4)$label = NA
+V(net_otu_4)[igraph::degree(net_otu_4) > mean(igraph::degree(net_otu_4))]$label = V(net_otu_4)[igraph::degree(net_otu_4) > mean(igraph::degree(net_otu_4))]$name
+
+set.seed(1)
+plot(net_otu_4, 
+     layout = layout_nicely, 
+     vertex.label.color = V(net_otu_4)$color, 
+     vertex.label.cex = 2, #标签缩放
+     vertex.label.dist = 1, #标签位置, 偏移距离
+     vertex.label.degree = -pi/2, # 标签位置， 上下左右偏移
+     edge.curved = 0.2, # 线的弯曲程度，取值0-1，0为不弯曲
+     mark.groups = list(V(net_otu_4)[(net_otu_4_clu$membership == 1)],
+                        V(net_otu_4)[(net_otu_4_clu$membership == 2)],
+                        V(net_otu_4)[(net_otu_4_clu$membership == 3)]),
+     mark.col = mark_col, mark.border = mark_col, mark.expand = 10)
+box(which = "plot", col = "#A0522D", lwd = 5, lty = 2)
+
+# 选择一些网络拓扑特征做统计描述，例如
+node_num <- vcount(net_otu_4)    #节点数量
+edge_num <- plyr::count(E(net_otu_4)$color == "#DC143C")
+posi_edge_num <- edge_num[edge_num$x == TRUE, "freq"]      #正相关边的数量
+nega_edge_num <- edge_num[edge_num$x == FALSE, "freq"]     #负相关边的数量
+
+V(net_otu_4)$degree <- igraph::degree(net_otu_4)    
+average_degree <- round(mean(igraph::degree(net_otu_4)), 3)    #节点平均度
+
+net_otu_4_fc <- cluster_fast_greedy(net_otu_4)
+modularity <- modularity(net_otu_4, membership(net_otu_4_fc))    #模块性（modularity）
+
+clustering_coefficient <- transitivity(net_otu_4)     #聚类系数（clustering coefficient）
+average_path_length <- average.path.length(net_otu_4, directed = FALSE)    #平均路径长度
+
+# 汇总输出
+net_otu_4_df <- data.frame(
+  "Node" = node_num,               #节点数量（number of nodes）
+  "Positive edge" = posi_edge_num,          #正相关边数量
+  "Negative edge" = nega_edge_num,          #负相关边数量
+  "Average degree" = round(average_degree, 3),         #节点平均度（average degree)
+  "Modularity" = round(modularity, 3),             #模块性（modularity）
+  "Clustering coefficient" = round(clustering_coefficient, 3), #聚类系数（clustering coefficient）
+  "Average path length" = round(average_path_length, 3),    #平均路径长度（average path length）
+  row.names = "Summer Biocrust-removal", check.names = FALSE)
+
+
+# 占位图 ---------------------------------------------------------------------
+x = 0
+y = 0
+plot(x, y, type = "n", axes = FALSE) # 报错不影响图
+
+# 图例
+legend(x = -1, y = 1.2, pch = 0, pt.cex = 2.5, bty = "n", col = c("#4682B4", "#A0522D", "#4682B4", "#A0522D"),
+       legend = c("Winter Biocrust", "Summer Biocrust", "Winter Biocrust-removal", "Summer Biocrust-removal"), lty = c(1, 1, 2, 2),
+       lwd = 2, seg.len = 1.5, x.intersp = 0.5, y.intersp = 1, cex = 2.8, title = "Sample", title.adj = 0)
+
+legend(x = -0.5, y = 1.2, pch = 19, pt.cex = 2.5, bty = "n", col = c("#5F9EA0", "#DDA0DD", "#A9A9A9"),
+       legend = c("Nitrososphaera cluster", "Nitrososphaera sister cluster", "Unclassified"),
+       x.intersp = 0.8, y.intersp = 1, cex = 2.8, title = "Taxa", title.adj = 0.05)
+
+legend(x = 0.05, y = 1.2, legend = c("Positive", "Negative"), col = c("#DC143C", "#00FF00"),
+       lwd = 4, bty = "n", x.intersp = 0.8, y.intersp = 1, cex = 2.8, seg.len = 1.5,
+       title = "Cor", title.adj = 0.15)
+
+legend(x = 0.08, y = -0.1, legend = c("Degree > mean(degree)"), bty = "n", pch = "a", lwd = 2,
+       seg.len = 1.5, x.intersp = 0.5, y.intersp = 1, cex = 2.8, title = "Lable", title.adj = 0.025)
+
+legend(x = 0.58, y = 1.2, legend = seq(1, 12, 3), pch = 19, col = "gray30", pt.cex = seq(0.6, 5, 0.7),
+       bty = "n", x.intersp = 0.8, y.intersp = 1, cex = 2.8, title = "Degree", title.adj = 1)
+
+legend(x = 0.75, y = 1.2, pch = 15, pt.cex = 2.5, bty = "n", col = pal_npg(alpha = 0.4)(9)[2:5],
+       legend = c("Module 1", "Module 2", "Module 3", "Module 4"),
+       x.intersp = 0.8, y.intersp = 1, cex = 2.8, title = "Module", title.adj = 0.2)
+
+```
+
+>Fig. 5
+
+\newpage
+
+>Table 1
+
+```{r network2, results = "asis"}
+# 网络属性汇总
+library(kableExtra)
+library(flextable)
+library(tibble)
+
+net_df <- rbind(net_otu_1_df, net_otu_2_df, net_otu_3_df, net_otu_4_df) %>% 
+  rownames_to_column()
+
+colnames(net_df) <- c(" ", "Node", "Positive edge", "Negative edge", "Average degree", "Modularity", "Clustering coefficient", "Average path length")
+
+write.csv(net_df, "data/otu_net_df.csv", row.names = FALSE)
+
+flextable(net_df) %>% 
+  align(align = "center", part = "all") %>%
+  bold(bold = TRUE, part = "header") %>%
+  border_inner_h(part = "header")
+```
+
+\newpage
+
+![](AOA_Standard.tif)
+![](AOB_Standard.tif)
+
+>Supplementary Fig. S1
+
+\newpage
+
+```{r Abundance, fig.width = 6, fig.height = 4}
+library(plyr)
+library(xlsx)
+library(tidyverse)
+
+# 读入OTUs数据
+otu <- read.csv("data/OTU表_抽平.csv", row.names = 1, check.names = FALSE)
+otu <- data.frame(t(otu))
+
+# 读入分类信息
+otu_taxa <- read.csv("data/otu_taxa.csv", header = T)
+
+# 定义分组颜色
+otu_taxa <- mutate(otu_taxa, 
+                   col = if_else(otu_taxa$Taxa == "Nitrososphaera cluster", "#5F9EA0", 
+                                 ifelse(otu_taxa$Taxa == "N'sister cluster", "#DDA0DD", "#A9A9A9")))
+
+year <- read.xlsx("data/yearall2.xlsx", header = TRUE, sheetName = "YEAR")
+group <- select(year, Sample, season, treat, layer)
+group_bar <- group[group$Sample %in% rownames(otu), ] %>% 
+  arrange(Sample, by = rownames(otu))
+group_bar$season <- factor(group_bar$season, levels = c("Winter", "Summer"))
+group_bar$layer <- factor(group_bar$layer, levels = c("0-2 cm", "2-5 cm"))
+
+otu_group <- cbind(group_bar, otu)
+otu_group <- ddply(otu_group, c("season", "layer"))
+
+otu_group_mean <- aggregate(otu_group[, (ncol(group_bar) + 1):ncol(otu_group)], 
+                            by = list(otu_group$season, otu_group$layer), FUN = mean)
+
+rownames(otu_group_mean) <- c("Winter Biocrust", "Summer Biocrust", "Winter Biocrust-removal", "Summer Biocrust-removal")
+
+otu_group_mean <- subset(otu_group_mean, select = c(-Group.1, -Group.2))
+
+otu_group_mean$sum <- rowSums(otu_group_mean)
+otu_group_mean <- otu_group_mean/otu_group_mean$sum
+otu_group_mean <- subset(otu_group_mean, select = -sum)
+
+otu_group_mean <- data.frame(t(otu_group_mean), check.names = F)
+otu_group_mean$sum <- rowSums(otu_group_mean)
+otu_group_mean <- otu_group_mean[order(otu_group_mean$sum, decreasing = TRUE), ]
+otu_group_mean <- subset(otu_group_mean, select = -sum)
+
+otu_top10 <- otu_group_mean[1:10, ]
+otu_top10["Others", ] <- 1 - colSums(otu_top10)
+
+text_col <- otu_taxa[otu_taxa$OTU %in% rownames(otu_top10), ] %>% 
+  arrange(OTU, by = rownames(otu_top10)[1:10])
+text_col <- c(text_col$col, "gray")
+
+otu_color <- c("#8DD3C7", "#B3DE69", "#BEBADA", "#FB8072", "#80B1D3", "#FDB462", "#FFFFB3", "#FCCDE5", "#BC80BD", "#CCEBC5", "gray")
+names(otu_color) <- rownames(otu_top10)
+
+par(mar = c(2.5, 4, 1, 4), mgp = c(2.5, 0.5, 0))
+
+barplot(as.matrix(otu_top10), col = otu_color, space = 0.4, width = 0.8, ylim = c(0, 1), 
+        horiz = FALSE, cex.lab = 1.2, ylab = "Relative abundance", xaxt = "n", yaxt = "n")
+box(which = "plot")
+
+xlab <- c("Winter\nBiocrust", "Summer\nBiocrust", "Winter\nBiocrust-removal", "Summer\nBiocrust-removal")
+text(x = c(0.7, 1.85, 2.95, 4.1), y = -0.06, labels = xlab, cex = 0.7, xpd = TRUE, col = c("#4682B4", "#A0522D", "#4682B4", "#A0522D"))
+
+axis(2, seq(0, 1, 0.2), labels = c("0%", "20%", "40%", "60%", "80%", "100%"), las = 1, tck = -0.008, cex.axis = 0.9)
+
+legend(4.7, 0.9, pch = 15, col = otu_color, legend = names(otu_color), 
+       text.col = text_col, bty = "n", cex = 0.8, x.intersp = 0.8, y.intersp = 1.3, xpd = TRUE)
+
+pdf("附图2.pdf", width = 6, height = 4)
+par(mar = c(2.5, 4, 1, 4), mgp = c(2.5, 0.5, 0))
+
+barplot(as.matrix(otu_top10), col = otu_color, space = 0.4, width = 0.8, ylim = c(0, 1), 
+        horiz = FALSE, cex.lab = 1.2, ylab = "Relative abundance", xaxt = "n", yaxt = "n")
+box(which = "plot")
+
+xlab <- c("Winter\nBiocrust", "Summer\nBiocrust", "Winter\nBiocrust-removal", "Summer\nBiocrust-removal")
+text(x = c(0.7, 1.85, 2.95, 4.1), y = -0.06, labels = xlab, cex = 0.7, xpd = TRUE, col = c("#4682B4", "#A0522D", "#4682B4", "#A0522D"))
+
+axis(2, seq(0, 1, 0.2), labels = c("0%", "20%", "40%", "60%", "80%", "100%"), las = 1, tck = -0.008, cex.axis = 0.9)
+
+legend(4.7, 0.9, pch = 15, col = otu_color, legend = names(otu_color), 
+       text.col = text_col, bty = "n", cex = 0.8, x.intersp = 0.8, y.intersp = 1.3, xpd = TRUE)
+dev.off()
+
+data.frame(treat = as.character(otu_group$layer),
+           per = otu_group$OTU26/rowSums(otu)) %>% 
+  filter(treat == "0-2 cm") %>% 
+  summarise(avg = mean(per), sd = sd(per))
+
+data.frame(treat = as.character(otu_group$layer),
+           per = otu_group$OTU26/rowSums(otu)) %>% 
+  filter(treat == "2-5 cm") %>% 
+  summarise(avg = mean(per), sd = sd(per))
+```
+
+>Supplementary Fig. S2
+
+\newpage
+
+>Supplementary Table S1
+
+```{r pairedTtest, results = "asis"}
+year <- read.xlsx("data/yearall2.xlsx", header = TRUE, sheetName = "YEAR") %>% 
+  filter(season %in% c("Winter", "Summer"))
+
+pairedT <- select(year, c("Sample", "season", "treat", "layer", "AOA", "AOB")) %>% 
+  pivot_longer(AOA:AOB, names_to = "cluster", values_to = "abundance")
+
+stat.test <- pairedT %>%
+  t_test(abundance ~ cluster, paired = TRUE) %>%
+  add_significance()
+
+flextable(stat.test) %>% 
+  align(align = "center", part = "all") %>%
+  bold(bold = TRUE, part = "header") %>%
+  border_inner_h(part = "header")
+```
+
+\newpage
+
+>Supplementary Table S2
+
+```{r amoATest, results = "asis"}
+# AOA
+winter_AOA <- year %>% 
+  filter(season == "Winter") %>% 
+  select(c("Sample", "season", "treat", "AOA"))
+
+winter_AOA_Ttest <- winter_AOA %>% 
+  t_test(AOA ~ treat) %>% 
+  add_significance()
+
+summer_AOA <- year %>% 
+  filter(season == "Summer") %>% 
+  select(c("Sample", "season", "treat", "AOA"))
+
+summer_AOA_Ttest <- summer_AOA %>% 
+  t_test(AOA ~ treat) %>% 
+  add_significance()
+
+# AOB
+winter_AOB <- year %>% 
+  filter(season == "Winter") %>% 
+  select(c("Sample", "season", "treat", "AOB"))
+
+winter_AOB_Ttest <- winter_AOB %>% 
+  t_test(AOB ~ treat) %>% 
+  add_significance()
+
+summer_AOB <- year %>% 
+  filter(season == "Summer") %>% 
+  select(c("Sample", "season", "treat", "AOB"))
+
+summer_AOB_Ttest <- summer_AOB %>% 
+  t_test(AOB ~ treat) %>% 
+  add_significance()
+
+table2 <- rbind(winter_AOA_Ttest, summer_AOA_Ttest, winter_AOB_Ttest, summer_AOB_Ttest)
+
+season <- data.frame(season = c("Winter", "Summer", "Winter", "Summer"))
+
+table2 <- cbind(season, table2)
+
+flextable(table2) %>% 
+  align(align = "center", part = "all") %>%
+  bold(bold = TRUE, part = "header") %>%
+  border_inner_h(part = "header")
+```
+
+\newpage
+
+>Supplementary Table S3
+
+```{r anovaRDA, results = "asis"}
+library(xlsx)
+library(vegan)
+
+year <- read.xlsx("data/yearall2.xlsx", header = TRUE, sheetName = "YEAR")
+
+year_df <- year[year$season %in% c("Winter", "Summer"), ]
+
+env <- subset(year_df, select = c(Tem:NO3))
+rownames(env) <- year_df$Sample
+
+sp <- subset(year_df, select = c(AOA:AOB))
+rownames(sp) <- year_df$Sample
+
+gr <- subset(year_df, select = c(season:layer))
+rownames(gr) <- year_df$Sample
+
+spp <- log10(sp) # 对物种变量做log转化
+
+env_scale <- data.frame(scale(env)) # 对环境因子进行标准化，是否进行标准化结果一样
+
+uu <- rda(spp ~., env_scale) # 所有环境因子进行RDA分析
+# uu
+
+# 用step模型检测最低AIC值, 筛选显著性
+mod_u <- step(uu, scope = formula(uu), test = "perm", trace = 0) # "perm"增加P值等参数
+
+uu <- rda(spp ~ Tem + NO3 + TC, data = env_scale) # RDA分析
+# vif.cca(uu)
+
+# summary(uu)
+
+ano_uu <- anova(uu)
+# ano_uu
+table3 <- anova(uu, by = "term") %>%
+  add_significance(p.col = "Pr(>F)", output.col = "p.signif") %>% 
+  rownames_to_column(var = "Term")
+
+flextable(table3) %>% 
+  align(align = "center", part = "all") %>%
+  bold(bold = TRUE, part = "header") %>%
+  border_inner_h(part = "header")
+```
+
+\newpage
+
+>Supplementary Table S4
+
+```{r S4, results = "asis"}
+table4 <- read.csv("data/table4.csv", row.names = 1, check.names = FALSE) %>% 
+  rownames_to_column(var = "Top rank")
+
+flextable(table4) %>% 
+  align(align = "center", part = "all") %>%
+  bold(bold = TRUE, part = "header") %>%
+  border_inner_h(part = "header")
+```
+
+\newpage
+
+```{r Module}
+library(psych)
+library(corrplot)
+library(pheatmap)
+
+p2star <- function(p){
+  symnum(p, cutpoints = c(0, 0.001, 0.01, 0.05, 1),
+         symbols = c("***", "**", "*", "" ), na = NA)
+}
+
+extract_OTU <- function(net_otu, net_otu_clu, module_num) {
+  result <- data.frame()
+  for (i in 1:module_num) {
+    tmp_data <- data.frame(module = paste0("module", i), 
+                           OTU = names(V(net_otu)[(net_otu_clu$membership == i)]))
+    result <- rbind(result, tmp_data)
+  }
+  return(result)
+}
+
+module_OTU_1 <- extract_OTU(net_otu_1, net_otu_1_clu, 4)
+module_OTU_2 <- extract_OTU(net_otu_2, net_otu_2_clu, 4)
+module_OTU_3 <- extract_OTU(net_otu_3, net_otu_3_clu, 3)
+module_OTU_4 <- extract_OTU(net_otu_4, net_otu_4_clu, 3)
+
+# 环境因子
+year <- read.xlsx("data/yearall2.xlsx", header = TRUE, row.names = 1, sheetName = "YEAR") %>% 
+  filter(rownames(.) %in% otu_group$Sample)
+
+year_scale <- as.matrix(scale(year[, 6:13]))
+year_scale <- cbind(year[, 1:3], year_scale)
+
+# # Winter 0-2 cm -----------------------------------------------------------
+
+env_1 <- year_scale %>% 
+  filter(season == "Winter", treat == "Biocrust", layer == "0-2 cm") %>% 
+  select(Tem:NO3)
+
+otu_group_1_data <- otu_group %>% 
+  filter(season == "Winter", layer == "0-2 cm") %>% 
+  select(-c(1:4)) %>% 
+  t() %>% 
+  as.data.frame() %>% 
+  rownames_to_column(var = "OTU") %>% 
+  filter(OTU %in% module_OTU_1$OTU) %>% 
+  left_join(module_OTU_1, join_by(OTU == OTU)) %>% 
+  select(-OTU) %>% 
+  group_by(module) %>% 
+  summarise_all(sum) %>% 
+  column_to_rownames(var = "module") %>% 
+  t() %>% 
+  as.data.frame()
+
+heatmap_data_1 <- corr.test(otu_group_1_data, env_1, method = "spearman", adjust = "none", use = "complete")
+heatmap_data_1_r <- as.matrix(heatmap_data_1$r)
+heatmap_data_1_p <- as.matrix(heatmap_data_1$p)
+
+heatmap_data_1_p_star <- matrix(as.character(p2star(heatmap_data_1_p)), ncol = ncol(heatmap_data_1_p))
+
+labels_col <- c(colnames(heatmap_data_1_r)[1:6], expression("NH"["4"]^"+"), expression("NO"["3"]^"-"))
+
+pdf("附图3_1.pdf", width = 6, height = 4)
+pheatmap(heatmap_data_1_r, color = colorRampPalette(c("#D2691E", "white", "#0000FF"))(210),
+         breaks = seq(-1, 1, 0.01), cluster_cols = FALSE, fontsize = 12, angle_col = 0,
+         display_numbers = heatmap_data_1_p_star, border_color = "#5F9EA0", labels_col = labels_col,
+         fontsize_number = 18, number_color = "black", drop_levels = FALSE,
+         legend_breaks = seq(-0.8, 0.8, 0.4))
+dev.off()
+
+
+# Summer 0-2 cm -----------------------------------------------------------
+
+env_2 <- year_scale %>% 
+  filter(season == "Summer", treat == "Biocrust", layer == "0-2 cm") %>% 
+  select(Tem:NO3)
+
+otu_group_2_data <- otu_group %>% 
+  filter(season == "Summer", layer == "0-2 cm") %>% 
+  select(-c(1:4)) %>% 
+  t() %>% 
+  as.data.frame() %>% 
+  rownames_to_column(var = "OTU") %>% 
+  filter(OTU %in% module_OTU_2$OTU) %>% 
+  left_join(module_OTU_2, join_by(OTU == OTU)) %>% 
+  select(-OTU) %>% 
+  group_by(module) %>% 
+  summarise_all(sum) %>% 
+  column_to_rownames(var = "module") %>% 
+  t() %>% 
+  as.data.frame()
+
+heatmap_data_2 <- corr.test(otu_group_2_data, env_2, method = "spearman", adjust = "none", use = "complete")
+heatmap_data_2_r <- as.matrix(heatmap_data_2$r)
+heatmap_data_2_p <- as.matrix(heatmap_data_2$p)
+
+heatmap_data_2_p_star <- matrix(as.character(p2star(heatmap_data_2_p)), ncol = ncol(heatmap_data_2_p))
+
+pdf("附图3_2.pdf", width = 6, height = 4)
+pheatmap(heatmap_data_2_r, color = colorRampPalette(c("#D2691E", "white", "#0000FF"))(210),
+         breaks = seq(-1, 1, 0.01), cluster_cols = FALSE, fontsize = 12, angle_col = 0,
+         display_numbers = heatmap_data_2_p_star, border_color = "#5F9EA0", labels_col = labels_col,
+         fontsize_number = 18, number_color = "black", drop_levels = FALSE,
+         legend_breaks = seq(-0.8, 0.8, 0.4))
+dev.off()
+
+# Winter 2-5 cm -----------------------------------------------------------
+
+env_3 <- year_scale %>% 
+  filter(season == "Winter", treat == "Biocrust", layer == "2-5 cm") %>% 
+  select(Tem:NO3)
+
+otu_group_3_data <- otu_group %>% 
+  filter(season == "Winter", layer == "2-5 cm") %>% 
+  select(-c(1:4)) %>% 
+  t() %>% 
+  as.data.frame() %>% 
+  rownames_to_column(var = "OTU") %>% 
+  filter(OTU %in% module_OTU_3$OTU) %>% 
+  left_join(module_OTU_3, join_by(OTU == OTU)) %>% 
+  select(-OTU) %>% 
+  group_by(module) %>% 
+  summarise_all(sum) %>% 
+  column_to_rownames(var = "module") %>% 
+  t() %>% 
+  as.data.frame()
+
+heatmap_data_3 <- corr.test(otu_group_3_data, env_3, method = "spearman", adjust = "none", use = "complete")
+heatmap_data_3_r <- as.matrix(heatmap_data_3$r)
+heatmap_data_3_p <- as.matrix(heatmap_data_3$p)
+
+heatmap_data_3_p_star <- matrix(as.character(p2star(heatmap_data_3_p)), ncol = ncol(heatmap_data_3_p))
+
+pdf("附图3_3.pdf", width = 6, height = 4)
+pheatmap(heatmap_data_3_r, color = colorRampPalette(c("#D2691E", "white", "#0000FF"))(210),
+         breaks = seq(-1, 1, 0.01), cluster_cols = FALSE, fontsize = 12, angle_col = 0,
+         display_numbers = heatmap_data_3_p_star, border_color = "#5F9EA0", labels_col = labels_col,
+         fontsize_number = 18, number_color = "black", drop_levels = FALSE,
+         legend_breaks = seq(-0.8, 0.8, 0.4))
+dev.off()
+
+# Summer 2-5 cm -----------------------------------------------------------
+
+env_4 <- year_scale %>% 
+  filter(season == "Summer", treat == "Biocrust", layer == "2-5 cm") %>% 
+  select(Tem:NO3)
+
+otu_group_4_data <- otu_group %>% 
+  filter(season == "Summer", layer == "2-5 cm") %>% 
+  select(-c(1:4)) %>% 
+  t() %>% 
+  as.data.frame() %>% 
+  rownames_to_column(var = "OTU") %>% 
+  filter(OTU %in% module_OTU_4$OTU) %>% 
+  left_join(module_OTU_4, join_by(OTU == OTU)) %>% 
+  select(-OTU) %>% 
+  group_by(module) %>% 
+  summarise_all(sum) %>% 
+  column_to_rownames(var = "module") %>% 
+  t() %>% 
+  as.data.frame()
+
+heatmap_data_4 <- corr.test(otu_group_4_data, env_4, method = "spearman", adjust = "none", use = "complete")
+heatmap_data_4_r <- as.matrix(heatmap_data_4$r)
+heatmap_data_4_p <- as.matrix(heatmap_data_4$p)
+
+heatmap_data_4_p_star <- matrix(as.character(p2star(heatmap_data_4_p)), ncol = ncol(heatmap_data_4_p))
+
+pdf("附图3_4.pdf", width = 6, height = 4)
+pheatmap(heatmap_data_4_r, color = colorRampPalette(c("#D2691E", "white", "#0000FF"))(210),
+         breaks = seq(-1, 1, 0.01), cluster_cols = FALSE, fontsize = 12, angle_col = 0,
+         display_numbers = heatmap_data_4_p_star, border_color = "#5F9EA0", labels_col = labels_col,
+         fontsize_number = 18, number_color = "black", drop_levels = FALSE,
+         legend_breaks = seq(-0.8, 0.8, 0.4))
+dev.off()
+```
+
+>Supplementary Fig. S3

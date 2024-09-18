@@ -1,0 +1,355 @@
+---
+title: "古尔班通古特沙漠生物土壤结皮对氨氧化微生物群落的影响"
+author:
+  - 刘鑫
+documentclass: ctexart
+output:
+  rticles::ctex:
+    fig_caption: yes
+    number_sections: yes
+    toc: no
+geometry: margin = 0.9in  # 调整页边距
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+	echo = FALSE, 
+	results = FALSE, 
+	message = FALSE, 
+	warning = FALSE, 
+	fig.keep = "high",
+	fig.align = "center",
+	dpi = 300
+)
+
+library(xlsx)
+library(tidyverse)
+library(rstatix)
+library(kableExtra)
+
+options(digits = 4, knitr.kable.NA = '')
+```
+
+# 附录
+
+Supplementary Fig. S1
+
+amoA标准曲线
+
+Supplementary Fig. S2
+
+```{r Rarefaction_curves, include=FALSE}
+library(xlsx)
+library(tidyverse)
+library(ggplot2)
+library(vegan)
+
+# 读入OTU数据
+otu <- read.csv("data/OTU表_抽平.csv", row.names = 1, check.names = FALSE)
+
+# 筛选出至少在3个样本中的序列数均大于或等于 5 的 OTU
+# otu <- otu[apply(otu, 1, function(x) {ifelse(sum(x>=3) > 3, TRUE, FALSE)}), ]
+
+otu <- data.frame(t(otu))
+
+# step 表示抽样步长
+rare_otu <- rarecurve(otu, step = 5, label = FALSE)
+
+names(rare_otu) <- rownames(otu)
+
+plot_data <- mapply(FUN = function(x, y) {
+  mydf <- as.data.frame(x)
+  colnames(mydf) <- "Sobs"
+  mydf$sample_name <- y
+  mydf$subsample <- attr(x, "Subsample")
+  mydf
+}, x = rare_otu, y = as.list(rownames(otu)), SIMPLIFY = FALSE)
+
+rowSums(otu)
+```
+
+```{r Rarefaction_curves_plot, fig.width = 6, fig.height = 3, fig.cap = "结皮覆盖土壤 AOA amoA 稀释曲线"}
+xy <- do.call(rbind, plot_data)
+colnames(xy) <- c("Sobs", "sample", "Subsample")
+xy$time <- substring(xy$sample, 1, 1)
+xy$layer <- substring(xy$sample, 5, 5)
+xy$tl <- paste(xy$time, xy$layer, sep = "_")
+# head(xy)
+
+p <- ggplot(xy) +
+  geom_point(aes(x = Subsample, y = Sobs, color = tl), size = 0.8) +
+  scale_color_manual(values = c("#4682B4", "#6FBAFF", "#FFA500", "#FFEECF"),
+                     breaks = c("1_A", "1_B", "6_A", "6_B"),
+                     labels = c("Winter 0-2 cm", "Winter 2-5 cm", "Summer 0-2 cm", "Summer 2-5 cm")) + 
+  guides(color = guide_legend(title = "", override.aes = list(size = 5))) +
+  theme_bw(base_size = 10) + 
+  theme(legend.key.height = unit(1, "cm"), 
+        legend.text = element_text(size =8, face = "bold"),
+        panel.grid = element_blank())
+
+p
+
+pdf("S2.pdf", width = 6, height = 3)
+p
+dev.off()
+```
+
+Supplementary Fig. S3
+
+```{r Abundance, fig.width = 7, fig.height = 6, fig.cap = "结皮覆盖土壤主要OTUs的相对丰度"}
+library(plyr)
+library(xlsx)
+library(tidyverse)
+
+# 读入OTUs数据
+otu <- read.csv("data/OTU表_抽平.csv", row.names = 1, check.names = FALSE)
+otu <- data.frame(t(otu))
+
+# 读入分类信息
+otu_taxa <- read.csv("data/otu_taxa.csv", header = T)
+
+# 定义分组颜色
+otu_taxa <- mutate(otu_taxa, 
+                   col = if_else(otu_taxa$Taxa == "Nitrososphaera cluster", "#5F9EA0", 
+                                 ifelse(otu_taxa$Taxa == "N'sister cluster", "#DDA0DD", "#A9A9A9")))
+
+year <- read.xlsx("data/yearall2.xlsx", header = TRUE, sheetName = "YEAR")
+group <- select(year, Sample, season, treat, layer)
+group_bar <- group[group$Sample %in% rownames(otu), ] %>% 
+  arrange(Sample, by = rownames(otu))
+group_bar$season <- factor(group_bar$season, levels = c("Winter", "Summer"))
+group_bar$layer <- factor(group_bar$layer, levels = c("0-2 cm", "2-5 cm"))
+
+otu_group <- cbind(group_bar, otu)
+otu_group <- ddply(otu_group, c("season", "layer"))
+
+otu_group_mean <- aggregate(otu_group[, (ncol(group_bar) + 1):ncol(otu_group)], 
+                            by = list(otu_group$season, otu_group$layer), FUN = mean)
+
+rownames(otu_group_mean) <- c("Winter Biocrust", "Summer Biocrust", "Winter Biocrust-removal", "Summer Biocrust-removal")
+
+otu_group_mean <- subset(otu_group_mean, select = c(-Group.1, -Group.2))
+
+otu_group_mean$sum <- rowSums(otu_group_mean)
+otu_group_mean <- otu_group_mean/otu_group_mean$sum
+otu_group_mean <- subset(otu_group_mean, select = -sum)
+
+otu_group_mean <- data.frame(t(otu_group_mean), check.names = F)
+otu_group_mean$sum <- rowSums(otu_group_mean)
+otu_group_mean <- otu_group_mean[order(otu_group_mean$sum, decreasing = TRUE), ]
+otu_group_mean <- subset(otu_group_mean, select = -sum)
+
+otu_top10 <- otu_group_mean[1:10, ]
+otu_top10["Others", ] <- 1 - colSums(otu_top10)
+
+text_col <- otu_taxa[otu_taxa$OTU %in% rownames(otu_top10), ] %>% 
+  arrange(OTU, by = rownames(otu_top10)[1:10])
+text_col <- c(text_col$col, "gray")
+
+otu_color <- c("#8DD3C7", "#B3DE69", "#BEBADA", "#FB8072", "#80B1D3", "#FDB462", "#FFFFB3", "#FCCDE5", "#BC80BD", "#CCEBC5", "gray")
+names(otu_color) <- rownames(otu_top10)
+
+par(mar = c(2.5, 5, 1, 6), mgp = c(3, 0.5, 0))
+
+barplot(as.matrix(otu_top10), col = otu_color, space = 0.4, width = 0.8, ylim = c(0, 1), 
+        horiz = FALSE, cex.lab = 1.5, ylab = "Relative abundance", xaxt = "n", yaxt = "n")
+box(which = "plot")
+
+xlab <- c("Winter\nBiocrust", "Summer\nBiocrust", "Winter\nBiocrust-removal", "Summer\nBiocrust-removal")
+text(x = c(0.7, 1.85, 2.95, 4.1), y = -0.04, labels = xlab, cex = 1, xpd = TRUE, col = c("#4682B4", "#FFA500", "#4682B4", "#FFA500"))
+
+axis(2, seq(0, 1, 0.2), labels = c("0%", "20%", "40%", "60%", "80%", "100%"), las = 1, tck = -0.008, cex.axis = 1)
+
+legend(4.7, 1.0, pch = 15, col = otu_color, legend = names(otu_color), 
+       text.col = text_col, bty = "n", cex = 1.2, x.intersp = 0.8, y.intersp = 2, xpd = TRUE)
+
+pdf("S3.pdf", width = 7, height = 6)
+par(mar = c(2.5, 5, 1, 6), mgp = c(3, 0.5, 0))
+
+barplot(as.matrix(otu_top10), col = otu_color, space = 0.4, width = 0.8, ylim = c(0, 1), 
+        horiz = FALSE, cex.lab = 1.5, ylab = "Relative abundance", xaxt = "n", yaxt = "n")
+box(which = "plot")
+
+xlab <- c("Winter\nBiocrust", "Summer\nBiocrust", "Winter\nBiocrust-removal", "Summer\nBiocrust-removal")
+text(x = c(0.7, 1.85, 2.95, 4.1), y = -0.04, labels = xlab, cex = 1, xpd = TRUE, col = c("#4682B4", "#FFA500", "#4682B4", "#FFA500"))
+
+axis(2, seq(0, 1, 0.2), labels = c("0%", "20%", "40%", "60%", "80%", "100%"), las = 1, tck = -0.008, cex.axis = 1)
+
+legend(4.7, 1.0, pch = 15, col = otu_color, legend = names(otu_color), 
+       text.col = text_col, bty = "n", cex = 1.2, x.intersp = 0.8, y.intersp = 2, xpd = TRUE)
+dev.off()
+
+data.frame(treat = as.character(otu_group$layer),
+           per = otu_group$OTU26/rowSums(otu)) %>% 
+  filter(treat == "0-2 cm") %>% 
+  summarise(avg = mean(per), sd = sd(per))
+
+data.frame(treat = as.character(otu_group$layer),
+           per = otu_group$OTU26/rowSums(otu)) %>% 
+  filter(treat == "2-5 cm") %>% 
+  summarise(avg = mean(per), sd = sd(per))
+```
+
+```{r pheatmap, fig.height = 6, fig.width = 7, fig.cap = "结皮覆盖土壤中主要氨氧化古菌OTUs与环境因子的相关性热图"}
+library(xlsx)
+library(tidyverse)
+library(psych)
+library(corrplot)
+library(pheatmap)
+library(RColorBrewer)
+
+
+otu <- read.csv("data/OTU表_抽平.csv", row.names = 1, check.names = FALSE)
+otu$sum <- rowSums(otu)
+otu <- otu[order(otu$sum, decreasing = TRUE), ]
+otu_TOP10 <- otu[1:10, -ncol(otu)]
+otu_TOP10 <- data.frame(t(otu_TOP10), check.names = FALSE)
+
+
+year <- read.xlsx("data/yearall2.xlsx", header = TRUE, row.names = 1, sheetName = "YEAR")
+group_env <- select(year, Tem:NO3)
+group_env <- group_env[rownames(group_env) %in% rownames(otu_TOP10), ]
+env <- as.matrix(scale(group_env))
+
+heatmap_data <- corr.test(otu_TOP10, env, method = "spearman", adjust = "none", use = "complete")
+heatmap_data_r <- as.matrix(heatmap_data$r)
+heatmap_data_p <- as.matrix(heatmap_data$p)
+
+p2star <- function(p){
+  symnum(p, cutpoints = c(0, 0.001, 0.01, 0.05, 1),
+         symbols = c("***", "**", "*", "" ), na = NA)
+}
+
+heatmap_data_p_star <- matrix(as.character(p2star(heatmap_data_p)), ncol = ncol(heatmap_data_p))
+
+labels_col <- c(colnames(heatmap_data_r)[1:6], expression("NH"["4"]^"+"), expression("NO"["3"]^"-"))
+
+p_heatmap <- pheatmap(heatmap_data_r, color = colorRampPalette(c("#D2691E", "white", "#0000FF"))(21),
+         breaks = seq(-1, 1, 0.1), cluster_cols = FALSE, fontsize = 12, angle_col = 0,
+         display_numbers = heatmap_data_p_star, border_color = "#5F9EA0", labels_col = labels_col,
+         fontsize_number = 18, number_color = "black", drop_levels = FALSE,
+         legend_breaks = seq(-0.8, 0.8, 0.4))
+# 
+# pdf("S5.pdf", width = 7, height = 6)
+# p_heatmap
+# dev.off()
+```
+
+Supplementary Table S1
+
+```{r pairedTtest, results = "asis"}
+year <- read.xlsx("data/yearall2.xlsx", header = TRUE, sheetName = "YEAR") %>% 
+  filter(season %in% c("Winter", "Summer"))
+
+pairedT <- select(year, c("Sample", "season", "treat", "layer", "AOA", "AOB")) %>% 
+  pivot_longer(AOA:AOB, names_to = "cluster", values_to = "abundance")
+
+stat.test <- pairedT %>%
+  t_test(abundance ~ cluster, paired = TRUE) %>%
+  add_significance()
+
+knitr::kable(stat.test, format = "pipe", align = "c", caption = "AOA amoA and AOB amoA genes paired T test") %>%
+  kable_styling(latex_options = c("scale_down"))
+```
+
+Supplementary Table S2
+
+```{r amoATest, results = "asis"}
+# AOA
+winter_AOA <- year %>% 
+  filter(season == "Winter") %>% 
+  select(c("Sample", "season", "treat", "AOA"))
+
+winter_AOA_Ttest <- winter_AOA %>% 
+  t_test(AOA ~ treat) %>% 
+  add_significance()
+
+summer_AOA <- year %>% 
+  filter(season == "Summer") %>% 
+  select(c("Sample", "season", "treat", "AOA"))
+
+summer_AOA_Ttest <- summer_AOA %>% 
+  t_test(AOA ~ treat) %>% 
+  add_significance()
+
+
+# AOB
+winter_AOB <- year %>% 
+  filter(season == "Winter") %>% 
+  select(c("Sample", "season", "treat", "AOB"))
+
+winter_AOB_Ttest <- winter_AOB %>% 
+  t_test(AOB ~ treat) %>% 
+  add_significance()
+
+summer_AOB <- year %>% 
+  filter(season == "Summer") %>% 
+  select(c("Sample", "season", "treat", "AOB"))
+
+summer_AOB_Ttest <- summer_AOB %>% 
+  t_test(AOB ~ treat) %>% 
+  add_significance()
+
+table2 <- rbind(winter_AOA_Ttest, summer_AOA_Ttest, winter_AOB_Ttest, summer_AOB_Ttest)
+
+season <- data.frame(season = c("Winter", "Summer", "Winter", "Summer"))
+
+table2 <- cbind(season, table2)
+
+knitr::kable(table2, format = "pipe", align = "c",
+             caption = "Comparison of the abundance of AOA and AOB amoA genes in Biocrust and Biocrust-removal soil in different seasons") %>%
+  kable_styling(latex_options = c("scale_down"))
+```
+
+Supplementary Table S3
+
+```{r anovaRDA, results = "asis"}
+library(xlsx)
+library(vegan)
+
+year <- read.xlsx("data/yearall2.xlsx", header = TRUE, sheetName = "YEAR")
+
+year_df <- year[year$season %in% c("Winter", "Summer"), ]
+
+env <- subset(year_df, select = c(Tem:NO3))
+rownames(env) <- year_df$Sample
+
+sp <- subset(year_df, select = c(AOA:AOB))
+rownames(sp) <- year_df$Sample
+
+gr <- subset(year_df, select = c(season:layer))
+rownames(gr) <- year_df$Sample
+
+spp <- log10(sp) # 对物种变量做log转化
+
+env_scale <- data.frame(scale(env)) # 对环境因子进行标准化，是否进行标准化结果一样
+
+uu <- rda(spp ~., env_scale) # 所有环境因子进行RDA分析
+# uu
+
+# 用step模型检测最低AIC值, 筛选显著性
+mod_u <- step(uu, scope = formula(uu), test = "perm", trace = 0) # "perm"增加P值等参数
+
+uu <- rda(spp ~ Tem + NO3 + TC, data = env_scale) # RDA分析
+# vif.cca(uu)
+
+# summary(uu)
+
+ano_uu <- anova(uu)
+# ano_uu
+table3 <- anova(uu, by = "term") %>%
+  add_significance(p.col = "Pr(>F)", 
+                   output.col = "p.signif")
+
+knitr::kable(table3, format = "pipe", align = "c", caption = "Effects of environmental factors on the abundance of AOA and AOB amoA genes") %>%
+  kable_styling(latex_options = c("scale_down"), full_width = TRUE)
+```
+
+Supplementary Table S4
+
+```{r S4, results = "asis"}
+table4 <- read.csv("data/table4.csv", check.names = FALSE)
+
+knitr::kable(table4, format = "pipe", align = "c", caption = "TOP10 highest normalized degree and betweenness OTUs in each network") %>%
+  kable_styling(latex_options = c("scale_down"), full_width = TRUE)
+```
