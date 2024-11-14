@@ -568,11 +568,9 @@ otu <- read.csv("data/OTU表_抽平.csv", row.names = 1, check.names = FALSE)
 p1 <- ggtree(tree, layout = "fan", open.angle = 13, ladderize = FALSE, branch.length = "none") + 
   # geom_text(aes(label = node)) + 
   # Nitrososphaera cluster
-  geom_hilight(node =  1:10, fill = "#5F9EA0", extend = 11) +
-  geom_hilight(node = 13:16, fill = "#5F9EA0", extend = 11) +
+  geom_hilight(node =  1:16, fill = "#5F9EA0", extend = 11) +
   geom_hilight(node = 23:34, fill = "#5F9EA0", extend = 11) +
-  geom_hilight(node = 41:46, fill = "#5F9EA0", extend = 11) +
-  geom_hilight(node = 48:58, fill = "#5F9EA0", extend = 11) +
+  geom_hilight(node = 41:58, fill = "#5F9EA0", extend = 11) +
   # Nitrososphaera sister cluster
   geom_hilight(node = 17:22, fill = "#DDA0DD", extend = 11) +
   # Nitrosocaldus cluster
@@ -592,6 +590,7 @@ p1 <- ggtree(tree, layout = "fan", open.angle = 13, ladderize = FALSE, branch.le
 
 tree_tip <- as.data.frame(tree$tip.label)
 colnames(tree_tip) <- "OTU"
+
 # 写入csv后手动检索分类
 # write.csv(tree_tip, "tree_tip.csv", row.names = F, quote = F) 
 
@@ -606,7 +605,7 @@ p2 <- p1 %<+% tree_tip_group +
   geom_tippoint(aes(color = Taxa, size = 2)) + 
   scale_color_manual(values = c("#00FFFF", "#DAA520", "#4169E1", "#5F9EA0", "#DDA0DD", "#A9A9A9")) +
   guides(size = "none", 
-         color = guide_legend(override.aes = list(size = 6))) 
+         color = guide_legend(override.aes = list(size = 6), order = 2)) 
 
 year <- read.xlsx("data/yearall2.xlsx", header = TRUE, sheetName = "YEAR")
 group <- select(year, Sample, season, treat, layer)
@@ -652,7 +651,7 @@ p3 <- gheatmap(p2, otu_group_map, offset = 10, width = 0.22, font.size = 5,
                colnames_angle = 86, colnames_offset_x = -0.2, colnames_offset_y = 84) + 
   scale_fill_manual(labels = c("Absence", "Presence", "Indicator"), 
                     values = c("#F5F5DC", "#90EE90", "#FFFFFF")) + 
-  guides(fill = guide_legend(title = "Existence"), override.aes = list(size = 6)) +
+  guides(fill = guide_legend(title = "Existence", override.aes = list(size = 6), order = 1)) +
   theme(legend.position = c(0.8, 0.15), 
         legend.box = "horizontal",
         legend.box.just = "bottom",
